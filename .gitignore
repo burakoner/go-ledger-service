@@ -23,3 +23,6 @@ go.work.sum
 
 # env file
 .env
+
+# local scratch docs (do not track)
+/000/
