@@ -67,14 +67,14 @@ Tenant isolation is implemented with PostgreSQL schemas.
 Mandatory metadata tables:
 
 - `tenant_accounts` (tenant registry)
-- `tenant_api_keys` (N-to-N API key mapping)
-- `configs` (tenant configuration)
+- `tenant_api_keys` (1-to-N API key mapping, one tenant can have multiple keys)
+- `tenant_configs` (tenant configuration)
 
 Operational tables in `public`:
 
-- `idempotency_keys`
-- `transaction_jobs`
-- `webhook_outbox`
+- `tenant_idempotency_keys`
+- `tenant_transaction_jobs`
+- `tenant_webhook_outbox`
 
 ## Tenant schemas
 
