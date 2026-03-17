@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -20,6 +21,7 @@ import (
 const (
 	healthTimeout             = 2 * time.Second
 	transactionIdempotencyTTL = 24 * time.Hour
+	balanceDecimalDigits      = 2
 )
 
 type LedgerAPI struct {
@@ -153,10 +155,11 @@ func (a *LedgerAPI) handleBalance(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"tenant_id":  tenantValue.TenantID,
-		"currency":   tenantValue.Currency,
-		"balance":    balance.AvailableBalance,
-		"updated_at": balance.UpdatedAt,
+		"tenant_id":       tenantValue.TenantID,
+		"currency":        tenantValue.Currency,
+		"balance":         balance.AvailableBalance,
+		"balance_decimal": formatBalanceDecimal(balance.AvailableBalance),
+		"updated_at":      balance.UpdatedAt,
 	})
 }
 
@@ -386,7 +389,7 @@ func (a *LedgerAPI) handleTransactionPlace(w http.ResponseWriter, r *http.Reques
 		"tenant_id":            tenantValue.TenantID,
 		"transaction":          result,
 		"idempotency_replayed": false,
-		"queue_status":         "PENDING_DB_QUEUE",
+		"queue_status":         "pending",
 	})
 }
 
@@ -519,4 +522,25 @@ func fmtJSONDecodeError(err error) error {
 		return errors.New("request body is required")
 	}
 	return errors.New("invalid JSON body: " + err.Error())
+}
+
+func formatBalanceDecimal(minorUnits int64) string {
+	scale := int64(1)
+	for i := 0; i < balanceDecimalDigits; i++ {
+		scale *= 10
+	}
+
+	negative := minorUnits < 0
+	absoluteValue := minorUnits
+	if negative {
+		absoluteValue = -absoluteValue
+	}
+
+	majorPart := absoluteValue / scale
+	minorPart := absoluteValue % scale
+	formatted := fmt.Sprintf("%d.%0*d", majorPart, balanceDecimalDigits, minorPart)
+	if negative {
+		return "-" + formatted
+	}
+	return formatted
 }

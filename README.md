@@ -55,19 +55,18 @@ Gerekçe: Redis düşük gecikmeli key kontrolü ve doğal süre sonu (expiratio
 
 ## Sonraki İyileştirme Adımları
 
-1. Admin API'nin tenant yaşam döngüsünü tam kapsaması (register, durum güncelleme, config güncelleme, listeleme/detay).
-2. Tenant oluşturma ve API key üretim/rotasyon süreçlerinin ayrılması.
-3. Kritik admin işlemlerine maker-checker tabanlı onay akışı eklenmesi.
-4. Admin API güvenliğinin IP allowlist, MFA ve kısa ömürlü yetki belirteçleriyle güçlendirilmesi.
-5. Eşzamanlılık ve tenant izolasyonuna odaklı integration test kapsamının genişletilmesi.
-6. Webhook teslimatının production seviyesinde retry/backoff, outbox izleme ve dead-letter akışıyla tamamlanması.
-7. Gözlemlenebilirlik katmanının structured log, metrik, trace ve alarm bileşenleriyle güçlendirilmesi.
-8. Migration rollout sürecinin otomasyonla güvenli hale getirilmesi (sıralı çalıştırma, doğrulama, geri dönüş planı).
-9. Ortam güvenlik kontrollerinin otomatikleştirilmesi (yanlış ortam koruması, zorunlu env/secrets doğrulaması).
-10. Servis logları ve audit logları için uçtan uca bir loglama kurgusunun kurulması, audit kayıtlarının append-only/değiştirilemez yapıda tutulması ve merkezi toplama ile saklama/erişim politikalarının tanımlanması.
-11. Tenant `suspended` durumuna alındığında API ve worker davranışının net politika ile tamamlanması (yeni istek reddi, pending işlemlerin deterministik yönetimi).
-12. Tenant durumu değişirken in-flight transaction yarışlarının (race) işlem öncesi son durum kontrolü ve test senaryolarıyla güvence altına alınması.
-13. Rate limiting katmanının uygulama içinden edge proxy seviyesine taşınması (örn. Nginx/Envoy/HAProxy), böylece uygulama üzerindeki yükün azaltılması ve tek noktadan güvenlik, yönlendirme, TLS, IP kısıtlama ve trafik politikalarının yönetilmesi.
+- Admin API'nin tenant yaşam döngüsünü tam kapsaması (register, durum güncelleme, config güncelleme, listeleme/detay).
+- Tenant oluşturma ve API key üretim/rotasyon süreçlerinin ayrılması.
+- Kritik admin işlemlerine maker-checker tabanlı onay akışı eklenmesi.
+- Admin API güvenliğinin IP allowlist, MFA ve kısa ömürlü yetki belirteçleriyle güçlendirilmesi.
+- Eşzamanlılık ve tenant izolasyonuna odaklı integration test kapsamının genişletilmesi.
+- Webhook teslimatının production seviyesinde retry/backoff, outbox izleme ve dead-letter akışıyla tamamlanması.
+- Gözlemlenebilirlik katmanının structured log, metrik, trace ve alarm bileşenleriyle güçlendirilmesi.
+- Migration rollout sürecinin otomasyonla güvenli hale getirilmesi (sıralı çalıştırma, doğrulama, geri dönüş planı).
+- Ortam güvenlik kontrollerinin otomatikleştirilmesi (yanlış ortam koruması, zorunlu env/secrets doğrulaması).
+- Servis logları ve audit logları için uçtan uca bir loglama kurgusunun kurulması, audit kayıtlarının append-only/değiştirilemez yapıda tutulması ve merkezi toplama ile saklama/erişim politikalarının tanımlanması.
+- Tenant durumu değişirken in-flight transaction yarışlarının (race) işlem öncesi son durum kontrolü ve test senaryolarıyla güvence altına alınması.
+- Rate limiting katmanının uygulama içinden edge proxy seviyesine taşınması (örn. Nginx/Envoy/HAProxy), böylece uygulama üzerindeki yükün azaltılması ve tek noktadan güvenlik, yönlendirme, TLS, IP kısıtlama ve trafik politikalarının yönetilmesi.
 
 ## Notlar
 

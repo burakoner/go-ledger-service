@@ -34,7 +34,6 @@ type runtime struct {
 	tenants []activeTenant
 }
 
-// Run starts the ledger-worker runtime.
 func Run(ctx context.Context, cfg config.LedgerWorkerConfig) error {
 	if cfg.WorkerCount <= 0 {
 		return errors.New("worker count must be greater than 0")
