@@ -28,14 +28,14 @@ const (
 
 var tenantSchemaPattern = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
-type registerTenantRequest struct {
+type tenantRegisterRequest struct {
 	TenantCode string                 `json:"tenant_code"`
 	Name       string                 `json:"name"`
 	Currency   string                 `json:"currency"`
 	Configs    map[string]interface{} `json:"configs"`
 }
 
-type registerTenantResponse struct {
+type tenantRegisterResponse struct {
 	TenantID     string `json:"id"`
 	TenantSchema string `json:"schema"`
 	APIKey       string `json:"api_key"`
@@ -54,7 +54,6 @@ type tenantAdminAPI struct {
 	adminKey              string
 }
 
-// main starts the ledger-admin API process.
 func main() {
 	// Get service port
 	port := os.Getenv("LEDGER_ADMIN_PORT")
@@ -123,7 +122,6 @@ func main() {
 	}
 }
 
-// loadTenantSchemaMigrationSQL reads the SQL template used for tenant schema creation.
 func loadTenantSchemaMigrationSQL(path string) (string, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -141,7 +139,10 @@ func loadTenantSchemaMigrationSQL(path string) (string, error) {
 	return sqlText, nil
 }
 
-// handleHealth checks service and database availability.
+func (a *tenantAdminAPI) isAuthorized(r *http.Request) bool {
+	return r.Header.Get("X-Admin-Key") == a.adminKey
+}
+
 func (a *tenantAdminAPI) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeAPIError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only GET is allowed")
@@ -162,24 +163,23 @@ func (a *tenantAdminAPI) handleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleRegisterTenant registers a tenant and creates the first API key.
 func (a *tenantAdminAPI) handleRegisterTenant(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeAPIError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only POST is allowed")
 		return
 	}
-	if !a.isAdminAuthorized(r) {
+	if !a.isAuthorized(r) {
 		writeAPIError(w, http.StatusUnauthorized, "UNAUTHORIZED", "invalid or missing X-Admin-Key")
 		return
 	}
 
-	var req registerTenantRequest
+	var req tenantRegisterRequest
 	if err := decodeJSONBody(r, &req); err != nil {
 		writeAPIError(w, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
 
-	if err := validateRegisterTenantRequest(&req); err != nil {
+	if err := validateTenantRegisterRequest(&req); err != nil {
 		writeAPIError(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 		return
 	}
@@ -198,69 +198,57 @@ func (a *tenantAdminAPI) handleRegisterTenant(w http.ResponseWriter, r *http.Req
 	writeJSON(w, http.StatusCreated, resp)
 }
 
-// isAdminAuthorized validates the admin key provided in request headers.
-func (a *tenantAdminAPI) isAdminAuthorized(r *http.Request) bool {
-	return r.Header.Get("X-Admin-Key") == a.adminKey
-}
-
-// registerTenant creates tenant metadata, tenant schema/tables, and first API key atomically.
-func (a *tenantAdminAPI) registerTenant(ctx context.Context, req registerTenantRequest) (registerTenantResponse, error) {
+func (a *tenantAdminAPI) registerTenant(ctx context.Context, req tenantRegisterRequest) (tenantRegisterResponse, error) {
 	tx, err := a.db.BeginTx(ctx, nil)
 	if err != nil {
-		return registerTenantResponse{}, fmt.Errorf("begin tx: %w", err)
+		return tenantRegisterResponse{}, fmt.Errorf("begin tx: %w", err)
 	}
 	defer func() {
 		_ = tx.Rollback()
 	}()
 
-	// Create a tenant UUID in DB and derive a safe schema name from it.
 	var tenantID string
 	if err := tx.QueryRowContext(ctx, "SELECT gen_random_uuid()::text").Scan(&tenantID); err != nil {
-		return registerTenantResponse{}, fmt.Errorf("generate tenant id: %w", err)
+		return tenantRegisterResponse{}, fmt.Errorf("generate tenant id: %w", err)
 	}
 
-	tenantSchema := makeTenantSchemaName(tenantID)
+	tenantSchema := tenantSchemaName(tenantID)
 	if !isValidSchemaName(tenantSchema) {
-		return registerTenantResponse{}, fmt.Errorf("invalid schema name generated: %s", tenantSchema)
+		return tenantRegisterResponse{}, fmt.Errorf("invalid schema name generated: %s", tenantSchema)
 	}
 
-	// Insert tenant account metadata.
 	const insertTenantSQL = `
 		INSERT INTO public.tenant_accounts (id, code, name, currency, status, schema)
 		VALUES ($1, $2, $3, $4, 'active', $5)
 	`
 	if _, err := tx.ExecContext(ctx, insertTenantSQL, tenantID, req.TenantCode, req.Name, req.Currency, tenantSchema); err != nil {
-		return registerTenantResponse{}, fmt.Errorf("insert tenant account: %w", err)
+		return tenantRegisterResponse{}, fmt.Errorf("insert tenant account: %w", err)
 	}
 
-	// Create tenant schema and tenant-local tables from migration SQL file.
 	if err := applyTenantSchemaMigration(ctx, tx, tenantSchema, a.tenantSchemaMigration); err != nil {
-		return registerTenantResponse{}, fmt.Errorf("apply tenant schema migration: %w", err)
+		return tenantRegisterResponse{}, fmt.Errorf("apply tenant schema migration: %w", err)
 	}
 
-	// Store optional tenant config values.
 	if err := upsertTenantConfigs(ctx, tx, tenantID, req.Configs); err != nil {
-		return registerTenantResponse{}, fmt.Errorf("upsert tenant configs: %w", err)
+		return tenantRegisterResponse{}, fmt.Errorf("upsert tenant configs: %w", err)
 	}
 
-	// Create the initial API key and store only its hash.
 	_, plainAPIKey, err := insertTenantAPIKey(ctx, tx, tenantID)
 	if err != nil {
-		return registerTenantResponse{}, fmt.Errorf("insert first api key: %w", err)
+		return tenantRegisterResponse{}, fmt.Errorf("insert first api key: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return registerTenantResponse{}, fmt.Errorf("commit tx: %w", err)
+		return tenantRegisterResponse{}, fmt.Errorf("commit tx: %w", err)
 	}
 
-	return registerTenantResponse{
+	return tenantRegisterResponse{
 		TenantID:     tenantID,
 		TenantSchema: tenantSchema,
 		APIKey:       plainAPIKey,
 	}, nil
 }
 
-// applyTenantSchemaMigration runs the tenant schema migration template for one tenant schema.
 func applyTenantSchemaMigration(ctx context.Context, tx *sql.Tx, tenantSchema, migrationTemplate string) error {
 	if strings.TrimSpace(migrationTemplate) == "" {
 		return errors.New("tenant migration template is empty")
@@ -278,7 +266,6 @@ func applyTenantSchemaMigration(ctx context.Context, tx *sql.Tx, tenantSchema, m
 	return nil
 }
 
-// upsertTenantConfigs stores provided config values for the given tenant.
 func upsertTenantConfigs(ctx context.Context, tx *sql.Tx, tenantID string, configs map[string]interface{}) error {
 	if len(configs) == 0 {
 		return nil
@@ -305,7 +292,6 @@ func upsertTenantConfigs(ctx context.Context, tx *sql.Tx, tenantID string, confi
 	return nil
 }
 
-// insertTenantAPIKey creates a new API key row and returns its public and secret parts.
 func insertTenantAPIKey(ctx context.Context, tx *sql.Tx, tenantID string) (string, string, error) {
 	plainAPIKey, err := generatePlainAPIKey()
 	if err != nil {
@@ -327,8 +313,7 @@ func insertTenantAPIKey(ctx context.Context, tx *sql.Tx, tenantID string) (strin
 	return apiKeyID, plainAPIKey, nil
 }
 
-// validateRegisterTenantRequest validates tenant registration payload fields.
-func validateRegisterTenantRequest(req *registerTenantRequest) error {
+func validateTenantRegisterRequest(req *tenantRegisterRequest) error {
 	req.TenantCode = strings.TrimSpace(req.TenantCode)
 	req.Name = strings.TrimSpace(req.Name)
 	req.Currency = strings.TrimSpace(strings.ToUpper(req.Currency))
@@ -348,7 +333,6 @@ func validateRegisterTenantRequest(req *registerTenantRequest) error {
 	}
 }
 
-// decodeJSONBody decodes JSON request body and rejects unknown fields.
 func decodeJSONBody(r *http.Request, dst interface{}) error {
 	defer func() {
 		_ = r.Body.Close()
@@ -364,7 +348,6 @@ func decodeJSONBody(r *http.Request, dst interface{}) error {
 	return nil
 }
 
-// writeJSON serializes payload as JSON with proper headers and status.
 func writeJSON(w http.ResponseWriter, statusCode int, payload interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
@@ -373,7 +356,6 @@ func writeJSON(w http.ResponseWriter, statusCode int, payload interface{}) {
 	}
 }
 
-// writeAPIError writes a standardized error response body.
 func writeAPIError(w http.ResponseWriter, statusCode int, code, message string) {
 	resp := errorResponse{}
 	resp.Error.Code = code
@@ -381,7 +363,6 @@ func writeAPIError(w http.ResponseWriter, statusCode int, code, message string) 
 	writeJSON(w, statusCode, resp)
 }
 
-// generatePlainAPIKey creates a random API key value shown only once to caller.
 func generatePlainAPIKey() (string, error) {
 	randomPart, err := generateRandomString(48)
 	if err != nil {
@@ -390,7 +371,6 @@ func generatePlainAPIKey() (string, error) {
 	return "TK_" + randomPart, nil
 }
 
-// generateRandomString generates a cryptographically secure random string using a-zA-Z0-9 characters.
 func generateRandomString(length int) (string, error) {
 	if length <= 0 {
 		return "", errors.New("length must be greater than 0")
@@ -410,23 +390,19 @@ func generateRandomString(length int) (string, error) {
 	return string(result), nil
 }
 
-// hashAPIKey creates a deterministic SHA-256 hash used for secure DB storage.
 func hashAPIKey(plainAPIKey string) string {
 	sum := sha256.Sum256([]byte(plainAPIKey))
 	return hex.EncodeToString(sum[:])
 }
 
-// makeTenantSchemaName creates a deterministic tenant schema name from tenant UUID.
-func makeTenantSchemaName(tenantID string) string {
+func tenantSchemaName(tenantID string) string {
 	return "tenant_" + strings.ReplaceAll(strings.ToLower(tenantID), "-", "")
 }
 
-// isValidSchemaName validates schema identifier format before dynamic SQL usage.
 func isValidSchemaName(schemaName string) bool {
 	return tenantSchemaPattern.MatchString(schemaName)
 }
 
-// isUniqueViolation checks PostgreSQL unique-violation SQLSTATE in an error string.
 func isUniqueViolation(err error) bool {
 	if err == nil {
 		return false
