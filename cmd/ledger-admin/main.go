@@ -12,6 +12,7 @@ import (
 	"log"
 	"math/big"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"strings"
@@ -24,6 +25,8 @@ const (
 	defaultTenantSchemaMigrationPath = "migrations/0002_init_tenant_schema.sql"
 	tenantSchemaPlaceholder          = "__TENANT_SCHEMA__"
 	apiKeyAlphabet                   = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	webhookEnabledConfigKey          = "webhook_enabled"
+	webhookURLConfigKey              = "webhook_url"
 )
 
 var tenantSchemaPattern = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
@@ -327,10 +330,92 @@ func validateTenantRegisterRequest(req *tenantRegisterRequest) error {
 
 	switch req.Currency {
 	case "GBP", "EUR", "USD", "TRY":
-		return nil
 	default:
 		return errors.New("currency must be one of GBP, EUR, USD, TRY")
 	}
+
+	normalizedConfigs, err := normalizeTenantConfigs(req.Configs)
+	if err != nil {
+		return err
+	}
+	req.Configs = normalizedConfigs
+
+	return nil
+}
+
+func normalizeTenantConfigs(input map[string]any) (map[string]any, error) {
+	configs := make(map[string]any, len(input)+2)
+	for key, value := range input {
+		configs[key] = value
+	}
+
+	webhookEnabled := false
+	if raw, ok := configs[webhookEnabledConfigKey]; ok {
+		value, err := parseBooleanConfig(raw, webhookEnabledConfigKey)
+		if err != nil {
+			return nil, err
+		}
+		webhookEnabled = value
+	}
+
+	webhookURL := ""
+	if raw, ok := configs[webhookURLConfigKey]; ok {
+		value, err := parseStringConfig(raw, webhookURLConfigKey)
+		if err != nil {
+			return nil, err
+		}
+		webhookURL = strings.TrimSpace(value)
+	}
+
+	if webhookEnabled && webhookURL == "" {
+		return nil, errors.New("configs.webhook_url is required when configs.webhook_enabled is true")
+	}
+	if webhookURL != "" {
+		if err := validateWebhookURL(webhookURL); err != nil {
+			return nil, err
+		}
+	}
+
+	configs[webhookEnabledConfigKey] = webhookEnabled
+	configs[webhookURLConfigKey] = webhookURL
+
+	return configs, nil
+}
+
+func parseBooleanConfig(raw any, fieldName string) (bool, error) {
+	value, ok := raw.(bool)
+	if !ok {
+		return false, fmt.Errorf("configs.%s must be a boolean", fieldName)
+	}
+	return value, nil
+}
+
+func parseStringConfig(raw any, fieldName string) (string, error) {
+	if raw == nil {
+		return "", nil
+	}
+	value, ok := raw.(string)
+	if !ok {
+		return "", fmt.Errorf("configs.%s must be a string", fieldName)
+	}
+	return value, nil
+}
+
+func validateWebhookURL(raw string) error {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("configs.%s must be a valid URL", webhookURLConfigKey)
+	}
+
+	scheme := strings.ToLower(strings.TrimSpace(parsed.Scheme))
+	if scheme != "http" && scheme != "https" {
+		return fmt.Errorf("configs.%s must start with http:// or https://", webhookURLConfigKey)
+	}
+	if strings.TrimSpace(parsed.Host) == "" {
+		return fmt.Errorf("configs.%s must include a host", webhookURLConfigKey)
+	}
+
+	return nil
 }
 
 func decodeJSONBody(r *http.Request, dst any) error {
