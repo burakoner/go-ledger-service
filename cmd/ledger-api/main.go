@@ -15,10 +15,11 @@ func main() {
 		port = "8080"
 	}
 
-	// Read the Redis and Database connection info from environment variables.
+	// Read dependency connection info from environment variables.
 	// These values are intentionally not logged to avoid leaking credentials.
 	_ = os.Getenv("REDIS_ADDR")
 	_ = os.Getenv("DATABASE_URL")
+	_ = os.Getenv("RABBITMQ_URL")
 
 	// Create the root router for all HTTP endpoints.
 	mux := http.NewServeMux()
@@ -37,8 +38,8 @@ func main() {
 
 	// Start the HTTP server and fail fast if startup/runtime errors occur.
 	addr := ":" + port
-	log.Printf("Server is starting on %s", addr)
+	log.Printf("Tenant Ledger API is starting on %s", addr)
 	if err := http.ListenAndServe(addr, mux); err != nil {
-		log.Fatalf("Server stopped: %v", err)
+		log.Fatalf("Tenant Ledger API stopped: %v", err)
 	}
 }
