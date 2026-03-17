@@ -8,9 +8,9 @@ services:
     container_name: go-ledger-api
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - ${LEDGER_API_PORT:-8080}:${LEDGER_API_PORT:-8080}
     environment:
-      PORT: "8080"
+      PORT: ${LEDGER_API_PORT:-8080}
       DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
       REDIS_ADDR: "redis:6379"
       RABBITMQ_URL: "amqp://${RABBITMQ_USER:-ledger}:${RABBITMQ_PASSWORD:-ledger}@rabbitmq:5672/"
@@ -39,9 +39,9 @@ services:
     container_name: go-ledger-admin
     restart: unless-stopped
     ports:
-      - "8081:8081"
+      - ${LEDGER_ADMIN_PORT:-8090}:${LEDGER_ADMIN_PORT:-8090}
     environment:
-      PORT: "8081"
+      PORT: ${LEDGER_ADMIN_PORT:-8090}
       DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
       TENANT_ADMIN_KEY: ${TENANT_ADMIN_KEY:-WX5TczRsQnCk7k8k9AXbsW5czRsQnCkg}
       TENANT_SCHEMA_MIGRATION_PATH: "migrations/0002_init_tenant_schema.sql"
@@ -49,7 +49,7 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8081/health || exit 1"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8090/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
