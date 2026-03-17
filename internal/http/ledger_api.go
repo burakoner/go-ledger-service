@@ -198,10 +198,10 @@ func (a *LedgerAPI) handleLedger(w http.ResponseWriter, r *http.Request) {
 func (a *LedgerAPI) handleTransactions(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		a.handleTransactionsList(w, r)
+		a.handleTransactionList(w, r)
 		return
 	case http.MethodPost:
-		a.handleTransactionsPlace(w, r)
+		a.handleTransactionPlace(w, r)
 		return
 	default:
 		writeAPIError(w, r, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only GET and POST are allowed")
@@ -209,7 +209,7 @@ func (a *LedgerAPI) handleTransactions(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (a *LedgerAPI) handleTransactionsList(w http.ResponseWriter, r *http.Request) {
+func (a *LedgerAPI) handleTransactionList(w http.ResponseWriter, r *http.Request) {
 	if a.transactionService == nil {
 		writeAPIError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "transaction service is not configured")
 		return
@@ -255,7 +255,7 @@ func (a *LedgerAPI) handleTransactionsList(w http.ResponseWriter, r *http.Reques
 	})
 }
 
-func (a *LedgerAPI) handleTransactionsPlace(w http.ResponseWriter, r *http.Request) {
+func (a *LedgerAPI) handleTransactionPlace(w http.ResponseWriter, r *http.Request) {
 	if a.transactionService == nil {
 		writeAPIError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "transaction service is not configured")
 		return
