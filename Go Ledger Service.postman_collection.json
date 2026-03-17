@@ -1,0 +1,272 @@
+{
+  "info": {
+    "_postman_id": "5f414695-80f0-43e0-9237-6b27cf8ec839",
+    "name": "Go Ledger Service",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "21040795"
+  },
+  "item": [
+    {
+      "name": "admin",
+      "item": [
+        {
+          "name": "/health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{adminBaseUrl}}/health",
+              "host": [
+                "{{adminBaseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "/api/v1/tenants/register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminApiKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"tenant_code\": \"Tenant Code 18\",\r\n    \"name\": \"Tenant Name 18\",\r\n    \"currency\": \"EUR\",\r\n    \"configs\": {\r\n        \"webhook_enabled\": true,\r\n        \"webhook_url\": \"http://localhost:8088/webhooks/transactions\",\r\n        \"webhook_retry\": 3\r\n    }\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{adminBaseUrl}}/api/v1/tenants/register",
+              "host": [
+                "{{adminBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tenants",
+                "register"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "ledger",
+      "item": [
+        {
+          "name": "/health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{ledgerBaseUrl}}/health",
+              "host": [
+                "{{ledgerBaseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "/api/v1/balance",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Api-Key",
+                "value": "{{tenantApiKey}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{ledgerBaseUrl}}/api/v1/balance",
+              "host": [
+                "{{ledgerBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "balance"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "/api/v1/ledger",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Api-Key",
+                "value": "{{tenantApiKey}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{ledgerBaseUrl}}/api/v1/ledger",
+              "host": [
+                "{{ledgerBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ledger"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "/api/v1/transactions",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Api-Key",
+                "value": "{{tenantApiKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"reference\": \"unique-idempotency-key-asd\",\r\n    \"type\": \"credit\",\r\n    \"amount\": 25000,\r\n    \"description\": \"Invoice #1043\",\r\n    \"metadata\": {}\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{ledgerBaseUrl}}/api/v1/transactions",
+              "host": [
+                "{{ledgerBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "transactions"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "/api/v1/transactions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Api-Key",
+                "value": "{{tenantApiKey}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{ledgerBaseUrl}}/api/v1/transactions",
+              "host": [
+                "{{ledgerBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "transactions"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "/api/v1/transactions/:guid",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Api-Key",
+                "value": "{{tenantApiKey}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{ledgerBaseUrl}}/api/v1/transactions/:guid",
+              "host": [
+                "{{ledgerBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "transactions",
+                ":guid"
+              ],
+              "variable": [
+                {
+                  "key": "guid",
+                  "value": "f0baf86b-ed87-402a-944d-7eab90c11b85"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "adminBaseUrl",
+      "value": "http://localhost:8090"
+    },
+    {
+      "key": "adminApiKey",
+      "value": "WX5TczRsQnCk7k8k9AXbsW5czRsQnCkg"
+    },
+    {
+      "key": "ledgerBaseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "tenantApiKey",
+      "value": "TK_aBkXxobVFJHlrR3habXDogp4DbdrQXa3WYiGToPnEPGnlPg8"
+    }
+  ]
+}
