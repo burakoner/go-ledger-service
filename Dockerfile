@@ -23,16 +23,15 @@ FROM alpine:3.21
 # Create a non-root user for safer runtime execution.
 RUN adduser -D -g "" appuser
 
+# Set the working directory for the runtime container.
 WORKDIR /app
-# Copy the binary built in the previous stage.
+
+# Copy the compiled binary and any necessary assets (like migrations) from the builder stage.
 COPY --from=builder /out/service /app/service
-# Copy migration files so runtime services can execute SQL templates.
 COPY --from=builder /app/migrations /app/migrations
 
+# Set permissions for the appuser to access the service and migrations.
 USER appuser
-
-# Expose the HTTP port used by the API.
-EXPOSE 8080
 
 # Start the API process.
 ENTRYPOINT ["/app/service"]
