@@ -10,8 +10,8 @@ docker compose up --build
 Sağlık kontrolleri:
 
 ```bash
-curl http://localhost:8080/api/v1/health
-curl http://localhost:8081/api/v1/health
+curl http://localhost:8080/health
+curl http://localhost:8081/health
 ```
 
 ## Mimari Genel Bakış
@@ -25,6 +25,7 @@ Tenant metadata verileri ortak `public` şemasında tutulur (`tenant_accounts`, 
 ## Redis Kullanımı (Neden ve Nerede)
 
 Redis şu amaçlarla kullanılır:
+
 - idempotency key kontrolü (TTL tabanlı tekrar oynatma penceresi)
 - tenant bazlı rate limiting
 
@@ -33,18 +34,22 @@ Gerekçe: Redis düşük gecikmeli key kontrolü ve doğal süre sonu (expiratio
 ## Tasarım Kararları ve Trade-Off'lar
 
 1. Ledger için ana veri kaynağı PostgreSQL seçildi.
+
 - Artı: bakiye ve ledger bütünlüğü için güçlü transaction tutarlılığı sağlar.
 - Eksi: SQL transaction ve kilitleme tasarımının daha dikkatli yapılması gerekir.
 
 2. Paylaşımlı satır yerine schema-per-tenant izolasyonu tercih edildi.
+
 - Artı: daha güçlü mantıksal izolasyon sınırı sağlar.
 - Eksi: dinamik şema oluşturma ve migration orkestrasyonu daha karmaşık hale gelir.
 
 3. Asenkron işleme RabbitMQ + worker ile ayrıştırıldı.
+
 - Artı: API, arka plan işleme sürerken daha hızlı yanıt verir.
 - Eksi: kuyruk gözlemlenebilirliği, retry davranışı ve hata yönetimi açısından ek operasyonel yük getirir.
 
 4. Idempotency ve rate limit kontrolleri PostgreSQL dışında Redis’te tutuldu.
+
 - Artı: tekrar istek tespiti ve limit kontrolü daha hızlı ve basit olur.
 - Eksi: kalıcılık (durability) beklentileri için ek strateji netleştirilmelidir.
 
@@ -59,3 +64,7 @@ Gerekçe: Redis düşük gecikmeli key kontrolü ve doğal süre sonu (expiratio
 7. Gözlemlenebilirlik katmanının structured log, metrik, trace ve alarm bileşenleriyle güçlendirilmesi.
 8. Migration rollout sürecinin otomasyonla güvenli hale getirilmesi (sıralı çalıştırma, doğrulama, geri dönüş planı).
 9. Ortam güvenlik kontrollerinin otomatikleştirilmesi (yanlış ortam koruması, zorunlu env/secrets doğrulaması).
+
+## Notlar
+
+- `ledger-api` ve `ledger-worker` tarafında `internal` katmanları aktif olarak kullanıldı. `ledger-admin` için aynı refactor teknik olarak uygun olsa da, mevcut task kapsamına onboarding dahil olmadığında bu servis bilinçli olarak daha sade bırakıldı.
