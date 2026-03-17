@@ -1,45 +1,47 @@
 package main
 
 import (
-	"fmt"
+	"context"
 	"log"
 	"net/http"
-	"os"
+	"time"
+
+	"github.com/burakoner/go-ledger-service/internal/config"
+	"github.com/burakoner/go-ledger-service/internal/db"
+	httpapi "github.com/burakoner/go-ledger-service/internal/http"
+	"github.com/burakoner/go-ledger-service/internal/repository"
+	"github.com/burakoner/go-ledger-service/internal/service"
 )
 
-// main is the entry point of the API process.
+// main starts ledger-api by wiring config, database, services, and HTTP handlers.
 func main() {
-	// Read the HTTP port from environment; use 8080 as a safe default.
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
+	cfg, err := config.LoadLedgerAPIConfigFromEnv()
+	if err != nil {
+		log.Fatalf("failed to load ledger-api config: %v", err)
 	}
 
-	// Read dependency connection info from environment variables.
-	// These values are intentionally not logged to avoid leaking credentials.
-	_ = os.Getenv("REDIS_ADDR")
-	_ = os.Getenv("DATABASE_URL")
-	_ = os.Getenv("RABBITMQ_URL")
+	postgresDB, err := db.OpenPostgres(cfg.DatabaseURL)
+	if err != nil {
+		log.Fatalf("failed to open database connection: %v", err)
+	}
+	defer func() {
+		if closeErr := postgresDB.Close(); closeErr != nil {
+			log.Printf("failed to close database connection: %v", closeErr)
+		}
+	}()
 
-	// Create the root router for all HTTP endpoints.
-	mux := http.NewServeMux()
+	if err := db.Ping(context.Background(), postgresDB, 5*time.Second); err != nil {
+		log.Fatalf("failed to ping database: %v", err)
+	}
 
-	// Root endpoint for a quick sanity check.
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = fmt.Fprintln(w, "Go Ledger Service API")
-	})
+	tenantRepo := repository.NewPostgresTenantRepository(postgresDB)
+	tenantAuthService := service.NewTenantAuthService(tenantRepo)
+	ledgerAPI := httpapi.NewLedgerAPI(postgresDB, tenantAuthService)
 
-	// Health endpoint used by local checks and container health probes.
-	mux.HandleFunc("/api/v1/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = fmt.Fprintln(w, "OK")
-	})
-
-	// Start the HTTP server and fail fast if startup/runtime errors occur.
-	addr := ":" + port
+	addr := ":" + cfg.Port
 	log.Printf("Tenant Ledger API is starting on %s", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	if err := http.ListenAndServe(addr, ledgerAPI.NewMux()); err != nil {
 		log.Fatalf("Tenant Ledger API stopped: %v", err)
 	}
 }
+
