@@ -17,13 +17,11 @@ const (
 
 var ErrInvalidPagination = errors.New("invalid pagination")
 
-// BalanceResult represents tenant current balance payload.
 type BalanceResult struct {
 	AvailableBalance int64     `json:"balance"`
 	UpdatedAt        time.Time `json:"updated_at"`
 }
 
-// LedgerEntryResult represents one ledger entry payload.
 type LedgerEntryResult struct {
 	ID              int64     `json:"id"`
 	TransactionID   string    `json:"transaction_id"`
@@ -34,22 +32,19 @@ type LedgerEntryResult struct {
 	CreatedAt       time.Time `json:"created_at"`
 }
 
-// LedgerQueryService defines read-only ledger endpoints behavior.
 type LedgerQueryService interface {
 	GetBalance(ctx context.Context, tenantValue tenant.ContextValue) (BalanceResult, error)
 	ListLedgerEntries(ctx context.Context, tenantValue tenant.ContextValue, limit, offset int) ([]LedgerEntryResult, int, int, error)
 }
 
 type ledgerQueryService struct {
-	ledgerReadRepo repository.LedgerReadRepository
+	ledgerReadRepo repository.LedgerRepository
 }
 
-// NewLedgerQueryService creates read-only ledger query service.
-func NewLedgerQueryService(ledgerReadRepo repository.LedgerReadRepository) LedgerQueryService {
+func NewLedgerQueryService(ledgerReadRepo repository.LedgerRepository) LedgerQueryService {
 	return &ledgerQueryService{ledgerReadRepo: ledgerReadRepo}
 }
 
-// GetBalance reads current tenant balance.
 func (s *ledgerQueryService) GetBalance(ctx context.Context, tenantValue tenant.ContextValue) (BalanceResult, error) {
 	row, err := s.ledgerReadRepo.GetBalance(ctx, tenantValue.TenantSchema)
 	if err != nil {
@@ -62,7 +57,6 @@ func (s *ledgerQueryService) GetBalance(ctx context.Context, tenantValue tenant.
 	}, nil
 }
 
-// ListLedgerEntries reads tenant ledger entries with normalized pagination.
 func (s *ledgerQueryService) ListLedgerEntries(ctx context.Context, tenantValue tenant.ContextValue, limit, offset int) ([]LedgerEntryResult, int, int, error) {
 	normalizedLimit, normalizedOffset, err := normalizeLedgerPagination(limit, offset)
 	if err != nil {
@@ -90,7 +84,6 @@ func (s *ledgerQueryService) ListLedgerEntries(ctx context.Context, tenantValue 
 	return results, normalizedLimit, normalizedOffset, nil
 }
 
-// normalizeLedgerPagination validates and defaults limit/offset values.
 func normalizeLedgerPagination(limit, offset int) (int, int, error) {
 	if limit == 0 {
 		limit = defaultLedgerPageLimit

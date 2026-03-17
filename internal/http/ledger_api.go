@@ -16,7 +16,6 @@ import (
 
 const healthTimeout = 2 * time.Second
 
-// LedgerAPI handles runtime ledger HTTP endpoints.
 type LedgerAPI struct {
 	db                *sql.DB
 	tenantAuthService service.TenantAuthService
@@ -24,7 +23,6 @@ type LedgerAPI struct {
 	transactionQuery  service.TransactionQueryService
 }
 
-// NewLedgerAPI builds a new ledger API handler set.
 func NewLedgerAPI(
 	db *sql.DB,
 	tenantAuthService service.TenantAuthService,
@@ -39,19 +37,16 @@ func NewLedgerAPI(
 	}
 }
 
-// NewMux builds the HTTP router for ledger-api endpoints.
 func (a *LedgerAPI) NewMux() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", a.withRequestID(a.handleHealth))
-	mux.HandleFunc("/api/v1/health", a.withRequestID(a.handleHealth))
-	mux.HandleFunc("/api/v1/transactions", a.withRequestID(a.withTenantAuth(a.handleTransactions)))
-	mux.HandleFunc("/api/v1/transactions/", a.withRequestID(a.withTenantAuth(a.handleTransactionByID)))
 	mux.HandleFunc("/api/v1/balance", a.withRequestID(a.withTenantAuth(a.handleBalance)))
 	mux.HandleFunc("/api/v1/ledger", a.withRequestID(a.withTenantAuth(a.handleLedger)))
+	mux.HandleFunc("/api/v1/transactions", a.withRequestID(a.withTenantAuth(a.handleTransactions)))
+	mux.HandleFunc("/api/v1/transactions/", a.withRequestID(a.withTenantAuth(a.handleTransactionByID)))
 	return mux
 }
 
-// withRequestID ensures each request has a request ID in context and response header.
 func (a *LedgerAPI) withRequestID(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		requestID := normalizeRequestID(r.Header.Get(requestIDHeaderName))
@@ -65,12 +60,7 @@ func (a *LedgerAPI) withRequestID(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// handleHealth checks process and database availability.
 func (a *LedgerAPI) handleHealth(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/health" && r.URL.Path != "/api/v1/health" {
-		writeAPIError(w, r, http.StatusNotFound, "NOT_FOUND", "route not found")
-		return
-	}
 	if r.Method != http.MethodGet {
 		writeAPIError(w, r, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only GET is allowed")
 		return
@@ -93,7 +83,6 @@ func (a *LedgerAPI) handleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// withTenantAuth validates X-API-Key and injects tenant metadata into request context.
 func (a *LedgerAPI) withTenantAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if a.tenantAuthService == nil {
@@ -128,14 +117,86 @@ func (a *LedgerAPI) withTenantAuth(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// handleTransactions routes list/create behavior on /api/v1/transactions.
+func (a *LedgerAPI) handleBalance(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIError(w, r, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only GET is allowed")
+		return
+	}
+	if a.ledgerQuery == nil {
+		writeAPIError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "ledger query service is not configured")
+		return
+	}
+
+	tenantValue, ok := tenant.FromContext(r.Context())
+	if !ok {
+		writeAPIError(w, r, http.StatusInternalServerError, "TENANT_CONTEXT_MISSING", "tenant context is missing")
+		return
+	}
+
+	balance, err := a.ledgerQuery.GetBalance(r.Context(), tenantValue)
+	if err != nil {
+		log.Printf("get balance failed: %v", err)
+		writeAPIError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to fetch balance")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"tenant_id":  tenantValue.TenantID,
+		"currency":   tenantValue.Currency,
+		"balance":    balance.AvailableBalance,
+		"updated_at": balance.UpdatedAt,
+	})
+}
+
+func (a *LedgerAPI) handleLedger(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIError(w, r, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only GET is allowed")
+		return
+	}
+	if a.ledgerQuery == nil {
+		writeAPIError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "ledger query service is not configured")
+		return
+	}
+
+	tenantValue, ok := tenant.FromContext(r.Context())
+	if !ok {
+		writeAPIError(w, r, http.StatusInternalServerError, "TENANT_CONTEXT_MISSING", "tenant context is missing")
+		return
+	}
+
+	limit, offset, err := parsePaginationQuery(r)
+	if err != nil {
+		writeAPIError(w, r, http.StatusBadRequest, "INVALID_PAGINATION", err.Error())
+		return
+	}
+
+	entries, normalizedLimit, normalizedOffset, err := a.ledgerQuery.ListLedgerEntries(r.Context(), tenantValue, limit, offset)
+	if err != nil {
+		if errors.Is(err, service.ErrInvalidPagination) {
+			writeAPIError(w, r, http.StatusBadRequest, "INVALID_PAGINATION", err.Error())
+			return
+		}
+
+		log.Printf("list ledger entries failed: %v", err)
+		writeAPIError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to fetch ledger entries")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"tenant_id": tenantValue.TenantID,
+		"limit":     normalizedLimit,
+		"offset":    normalizedOffset,
+		"entries":   entries,
+	})
+}
+
 func (a *LedgerAPI) handleTransactions(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		a.handleTransactionsList(w, r)
 		return
 	case http.MethodPost:
-		a.handleTransactionsPlaceholder(w, r)
+		a.handleTransactionsPlace(w, r)
 		return
 	default:
 		writeAPIError(w, r, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only GET and POST are allowed")
@@ -143,21 +204,6 @@ func (a *LedgerAPI) handleTransactions(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleTransactionsPlaceholder keeps POST behavior as placeholder until async flow is implemented.
-func (a *LedgerAPI) handleTransactionsPlaceholder(w http.ResponseWriter, r *http.Request) {
-	tenantValue, ok := tenant.FromContext(r.Context())
-	if !ok {
-		writeAPIError(w, r, http.StatusInternalServerError, "TENANT_CONTEXT_MISSING", "tenant context is missing")
-		return
-	}
-
-	writeJSON(w, http.StatusNotImplemented, map[string]string{
-		"message":   "transactions endpoint will be implemented in next step",
-		"tenant_id": tenantValue.TenantID,
-	})
-}
-
-// handleTransactionsList returns transaction list with optional status filter and pagination.
 func (a *LedgerAPI) handleTransactionsList(w http.ResponseWriter, r *http.Request) {
 	if a.transactionQuery == nil {
 		writeAPIError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "transaction query service is not configured")
@@ -204,7 +250,19 @@ func (a *LedgerAPI) handleTransactionsList(w http.ResponseWriter, r *http.Reques
 	})
 }
 
-// handleTransactionByID returns one transaction by path parameter.
+func (a *LedgerAPI) handleTransactionsPlace(w http.ResponseWriter, r *http.Request) {
+	tenantValue, ok := tenant.FromContext(r.Context())
+	if !ok {
+		writeAPIError(w, r, http.StatusInternalServerError, "TENANT_CONTEXT_MISSING", "tenant context is missing")
+		return
+	}
+
+	writeJSON(w, http.StatusNotImplemented, map[string]string{
+		"message":   "transactions endpoint will be implemented in next step",
+		"tenant_id": tenantValue.TenantID,
+	})
+}
+
 func (a *LedgerAPI) handleTransactionByID(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeAPIError(w, r, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only GET is allowed")
@@ -249,82 +307,6 @@ func (a *LedgerAPI) handleTransactionByID(w http.ResponseWriter, r *http.Request
 	})
 }
 
-// handleBalance returns current balance for authenticated tenant.
-func (a *LedgerAPI) handleBalance(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeAPIError(w, r, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only GET is allowed")
-		return
-	}
-	if a.ledgerQuery == nil {
-		writeAPIError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "ledger query service is not configured")
-		return
-	}
-
-	tenantValue, ok := tenant.FromContext(r.Context())
-	if !ok {
-		writeAPIError(w, r, http.StatusInternalServerError, "TENANT_CONTEXT_MISSING", "tenant context is missing")
-		return
-	}
-
-	balance, err := a.ledgerQuery.GetBalance(r.Context(), tenantValue)
-	if err != nil {
-		log.Printf("get balance failed: %v", err)
-		writeAPIError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to fetch balance")
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"tenant_id":  tenantValue.TenantID,
-		"currency":   tenantValue.Currency,
-		"balance":    balance.AvailableBalance,
-		"updated_at": balance.UpdatedAt,
-	})
-}
-
-// handleLedger returns ledger entries for authenticated tenant.
-func (a *LedgerAPI) handleLedger(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeAPIError(w, r, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only GET is allowed")
-		return
-	}
-	if a.ledgerQuery == nil {
-		writeAPIError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "ledger query service is not configured")
-		return
-	}
-
-	tenantValue, ok := tenant.FromContext(r.Context())
-	if !ok {
-		writeAPIError(w, r, http.StatusInternalServerError, "TENANT_CONTEXT_MISSING", "tenant context is missing")
-		return
-	}
-
-	limit, offset, err := parsePaginationQuery(r)
-	if err != nil {
-		writeAPIError(w, r, http.StatusBadRequest, "INVALID_PAGINATION", err.Error())
-		return
-	}
-
-	entries, normalizedLimit, normalizedOffset, err := a.ledgerQuery.ListLedgerEntries(r.Context(), tenantValue, limit, offset)
-	if err != nil {
-		if errors.Is(err, service.ErrInvalidPagination) {
-			writeAPIError(w, r, http.StatusBadRequest, "INVALID_PAGINATION", err.Error())
-			return
-		}
-
-		log.Printf("list ledger entries failed: %v", err)
-		writeAPIError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to fetch ledger entries")
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"tenant_id": tenantValue.TenantID,
-		"limit":     normalizedLimit,
-		"offset":    normalizedOffset,
-		"entries":   entries,
-	})
-}
-
-// parsePaginationQuery parses optional limit and offset query params.
 func parsePaginationQuery(r *http.Request) (int, int, error) {
 	limit, err := parseOptionalIntQueryParam(r, "limit")
 	if err != nil {
@@ -337,7 +319,6 @@ func parsePaginationQuery(r *http.Request) (int, int, error) {
 	return limit, offset, nil
 }
 
-// parseOptionalIntQueryParam parses one optional integer query parameter.
 func parseOptionalIntQueryParam(r *http.Request, name string) (int, error) {
 	rawValue := strings.TrimSpace(r.URL.Query().Get(name))
 	if rawValue == "" {
@@ -351,7 +332,6 @@ func parseOptionalIntQueryParam(r *http.Request, name string) (int, error) {
 	return value, nil
 }
 
-// parseTransactionIDFromPath extracts transaction ID from /api/v1/transactions/:id path.
 func parseTransactionIDFromPath(path string) (string, error) {
 	const prefix = "/api/v1/transactions/"
 	if !strings.HasPrefix(path, prefix) {

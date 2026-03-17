@@ -19,13 +19,10 @@ const (
 )
 
 var (
-	// ErrInvalidTransactionQuery indicates invalid list filters or pagination.
 	ErrInvalidTransactionQuery = errors.New("invalid transaction query")
-	// ErrTransactionNotFound indicates missing transaction for tenant.
-	ErrTransactionNotFound = errors.New("transaction not found")
+	ErrTransactionNotFound     = errors.New("transaction not found")
 )
 
-// TransactionResult represents one transaction payload in API responses.
 type TransactionResult struct {
 	ID            string          `json:"id"`
 	Reference     string          `json:"reference"`
@@ -41,22 +38,19 @@ type TransactionResult struct {
 	ProcessedAt   *time.Time      `json:"processed_at,omitempty"`
 }
 
-// TransactionQueryService defines read-only transaction query behavior.
 type TransactionQueryService interface {
 	GetTransactionByID(ctx context.Context, tenantValue tenant.ContextValue, transactionID string) (TransactionResult, error)
 	ListTransactions(ctx context.Context, tenantValue tenant.ContextValue, status string, limit, offset int) ([]TransactionResult, string, int, int, error)
 }
 
 type transactionQueryService struct {
-	transactionReadRepo repository.TransactionReadRepository
+	transactionReadRepo repository.LedgerRepository
 }
 
-// NewTransactionQueryService creates read-only transaction query service.
-func NewTransactionQueryService(transactionReadRepo repository.TransactionReadRepository) TransactionQueryService {
+func NewTransactionQueryService(transactionReadRepo repository.LedgerRepository) TransactionQueryService {
 	return &transactionQueryService{transactionReadRepo: transactionReadRepo}
 }
 
-// GetTransactionByID reads one tenant transaction by ID.
 func (s *transactionQueryService) GetTransactionByID(ctx context.Context, tenantValue tenant.ContextValue, transactionID string) (TransactionResult, error) {
 	transactionID = strings.TrimSpace(transactionID)
 	if transactionID == "" {
@@ -74,7 +68,6 @@ func (s *transactionQueryService) GetTransactionByID(ctx context.Context, tenant
 	return mapTransactionRowToResult(row), nil
 }
 
-// ListTransactions reads tenant transactions with optional status filtering.
 func (s *transactionQueryService) ListTransactions(ctx context.Context, tenantValue tenant.ContextValue, status string, limit, offset int) ([]TransactionResult, string, int, int, error) {
 	normalizedStatus, normalizedLimit, normalizedOffset, err := normalizeTransactionListQuery(status, limit, offset)
 	if err != nil {
@@ -94,7 +87,6 @@ func (s *transactionQueryService) ListTransactions(ctx context.Context, tenantVa
 	return results, normalizedStatus, normalizedLimit, normalizedOffset, nil
 }
 
-// normalizeTransactionListQuery validates status/limit/offset values.
 func normalizeTransactionListQuery(status string, limit, offset int) (string, int, int, error) {
 	status = strings.TrimSpace(strings.ToLower(status))
 	if status != "" {
@@ -122,7 +114,6 @@ func normalizeTransactionListQuery(status string, limit, offset int) (string, in
 	return status, limit, offset, nil
 }
 
-// mapTransactionRowToResult converts repository model into API response model.
 func mapTransactionRowToResult(row repository.TransactionRow) TransactionResult {
 	metadata := row.Metadata
 	if len(metadata) == 0 {
@@ -144,4 +135,3 @@ func mapTransactionRowToResult(row repository.TransactionRow) TransactionResult 
 		ProcessedAt:   row.ProcessedAt,
 	}
 }
-

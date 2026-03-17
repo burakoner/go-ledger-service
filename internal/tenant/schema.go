@@ -8,4 +8,3 @@ var schemaNamePattern = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 func IsValidSchemaName(schemaName string) bool {
 	return schemaNamePattern.MatchString(schemaName)
 }
-

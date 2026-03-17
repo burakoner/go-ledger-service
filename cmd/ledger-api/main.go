@@ -13,7 +13,6 @@ import (
 	"github.com/burakoner/go-ledger-service/internal/service"
 )
 
-// main starts ledger-api by wiring config, database, services, and HTTP handlers.
 func main() {
 	cfg, err := config.LoadLedgerAPIConfigFromEnv()
 	if err != nil {
@@ -36,13 +35,12 @@ func main() {
 
 	// Repositories
 	tenantRepo := repository.NewPostgresTenantRepository(postgresDB)
-	ledgerReadRepo := repository.NewPostgresLedgerReadRepository(postgresDB)
-	transactionReadRepo := repository.NewPostgresTransactionReadRepository(postgresDB)
+	ledgerRepo := repository.NewPostgresLedgerRepository(postgresDB)
 
 	// Services
 	tenantAuthService := service.NewTenantAuthService(tenantRepo)
-	ledgerQueryService := service.NewLedgerQueryService(ledgerReadRepo)
-	transactionQueryService := service.NewTransactionQueryService(transactionReadRepo)
+	ledgerQueryService := service.NewLedgerQueryService(ledgerRepo)
+	transactionQueryService := service.NewTransactionQueryService(ledgerRepo)
 
 	// HTTP API
 	ledgerAPI := httpapi.NewLedgerAPI(postgresDB, tenantAuthService, ledgerQueryService, transactionQueryService)
