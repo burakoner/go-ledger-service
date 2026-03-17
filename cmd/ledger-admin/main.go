@@ -38,7 +38,6 @@ type registerTenantRequest struct {
 type registerTenantResponse struct {
 	TenantID     string `json:"id"`
 	TenantSchema string `json:"schema"`
-	APIKeyID     string `json:"api_key_id"`
 	APIKey       string `json:"api_key"`
 }
 
@@ -115,7 +114,7 @@ func main() {
 	// Configure HTTP routes.
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", api.handleRoot)
-	mux.HandleFunc("/api/v1/health", api.handleHealth)
+	mux.HandleFunc("/health", api.handleHealth)
 	mux.HandleFunc("/api/v1/tenants/register", api.handleRegisterTenant)
 
 	addr := ":" + port
@@ -256,7 +255,7 @@ func (a *tenantAdminAPI) registerTenant(ctx context.Context, req registerTenantR
 	}
 
 	// Create the initial API key and store only its hash.
-	apiKeyID, plainAPIKey, err := insertTenantAPIKey(ctx, tx, tenantID)
+	_, plainAPIKey, err := insertTenantAPIKey(ctx, tx, tenantID)
 	if err != nil {
 		return registerTenantResponse{}, fmt.Errorf("insert first api key: %w", err)
 	}
@@ -268,7 +267,6 @@ func (a *tenantAdminAPI) registerTenant(ctx context.Context, req registerTenantR
 	return registerTenantResponse{
 		TenantID:     tenantID,
 		TenantSchema: tenantSchema,
-		APIKeyID:     apiKeyID,
 		APIKey:       plainAPIKey,
 	}, nil
 }
