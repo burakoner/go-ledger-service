@@ -383,9 +383,10 @@ func (a *LedgerAPI) handleTransactionPlace(w http.ResponseWriter, r *http.Reques
 	}
 
 	writeJSON(w, http.StatusAccepted, map[string]interface{}{
-		"tenant_id":    tenantValue.TenantID,
-		"transaction":  result,
-		"queue_status": "TODO_RABBITMQ_PUBLISH",
+		"tenant_id":            tenantValue.TenantID,
+		"transaction":          result,
+		"idempotency_replayed": false,
+		"queue_status":         "TODO_RABBITMQ_PUBLISH",
 	})
 }
 
