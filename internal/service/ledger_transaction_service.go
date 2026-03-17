@@ -19,9 +19,10 @@ const (
 )
 
 var (
-	ErrInvalidTransactionQuery = errors.New("invalid transaction query")
-	ErrTransactionNotFound     = errors.New("transaction not found")
-	ErrInvalidTransactionInput = errors.New("invalid transaction input")
+	ErrInvalidTransactionQuery           = errors.New("invalid transaction query")
+	ErrTransactionNotFound               = errors.New("transaction not found")
+	ErrInvalidTransactionInput           = errors.New("invalid transaction input")
+	ErrTransactionReferenceAlreadyExists = errors.New("transaction reference already exists")
 )
 
 type TransactionResult struct {
@@ -49,6 +50,7 @@ type CreatePendingTransactionInput struct {
 
 type LedgerTransactionService interface {
 	GetTransactionByID(ctx context.Context, tenantValue tenant.ContextValue, transactionID string) (TransactionResult, error)
+	GetTransactionByReference(ctx context.Context, tenantValue tenant.ContextValue, reference string) (TransactionResult, error)
 	ListTransactions(ctx context.Context, tenantValue tenant.ContextValue, status string, limit, offset int) ([]TransactionResult, string, int, int, error)
 	CreatePendingTransaction(ctx context.Context, tenantValue tenant.ContextValue, input CreatePendingTransactionInput) (TransactionResult, error)
 }
@@ -73,6 +75,23 @@ func (s *ledgerTransactionService) GetTransactionByID(ctx context.Context, tenan
 			return TransactionResult{}, ErrTransactionNotFound
 		}
 		return TransactionResult{}, fmt.Errorf("get transaction by id: %w", err)
+	}
+
+	return mapTransactionRowToResult(row), nil
+}
+
+func (s *ledgerTransactionService) GetTransactionByReference(ctx context.Context, tenantValue tenant.ContextValue, reference string) (TransactionResult, error) {
+	reference = strings.TrimSpace(reference)
+	if reference == "" {
+		return TransactionResult{}, fmt.Errorf("%w: reference is required", ErrInvalidTransactionQuery)
+	}
+
+	row, err := s.ledgerRepo.GetTransactionByReference(ctx, tenantValue.TenantSchema, reference)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return TransactionResult{}, ErrTransactionNotFound
+		}
+		return TransactionResult{}, fmt.Errorf("get transaction by reference: %w", err)
 	}
 
 	return mapTransactionRowToResult(row), nil
@@ -105,6 +124,9 @@ func (s *ledgerTransactionService) CreatePendingTransaction(ctx context.Context,
 
 	row, err := s.ledgerRepo.CreatePendingTransaction(ctx, tenantValue.TenantSchema, params)
 	if err != nil {
+		if errors.Is(err, repository.ErrTransactionReferenceAlreadyExists) {
+			return TransactionResult{}, ErrTransactionReferenceAlreadyExists
+		}
 		return TransactionResult{}, fmt.Errorf("create pending transaction: %w", err)
 	}
 
