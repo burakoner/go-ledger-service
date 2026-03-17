@@ -3,21 +3,19 @@ package config
 import (
 	"errors"
 	"os"
+	"strconv"
+	"strings"
 )
 
 type LedgerAPIConfig struct {
 	Port        string
 	DatabaseURL string
 	RedisAddr   string
-	RabbitMQURL string
 }
 
 type LedgerWorkerConfig struct {
-	DatabaseURL      string
-	RedisAddr        string
-	RabbitMQURL      string
-	RabbitMQUser     string
-	RabbitMQPassword string
+	DatabaseURL string
+	WorkerCount int
 }
 
 func LoadLedgerAPIConfigFromEnv() (LedgerAPIConfig, error) {
@@ -35,16 +33,30 @@ func LoadLedgerAPIConfigFromEnv() (LedgerAPIConfig, error) {
 		Port:        port,
 		DatabaseURL: databaseURL,
 		RedisAddr:   os.Getenv("REDIS_ADDR"),
-		RabbitMQURL: os.Getenv("RABBITMQ_URL"),
 	}, nil
 }
 
-func LoadLedgerWorkerConfigFromEnv() LedgerWorkerConfig {
-	return LedgerWorkerConfig{
-		DatabaseURL:      os.Getenv("DATABASE_URL"),
-		RedisAddr:        os.Getenv("REDIS_ADDR"),
-		RabbitMQURL:      os.Getenv("RABBITMQ_URL"),
-		RabbitMQUser:     os.Getenv("RABBITMQ_USER"),
-		RabbitMQPassword: os.Getenv("RABBITMQ_PASSWORD"),
+func LoadLedgerWorkerConfigFromEnv() (LedgerWorkerConfig, error) {
+	databaseURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
+	if databaseURL == "" {
+		return LedgerWorkerConfig{}, errors.New("DATABASE_URL is required")
 	}
+
+	workerCount := 2
+	rawWorkerCount := strings.TrimSpace(os.Getenv("WORKER_COUNT"))
+	if rawWorkerCount != "" {
+		parsed, err := strconv.Atoi(rawWorkerCount)
+		if err != nil {
+			return LedgerWorkerConfig{}, errors.New("WORKER_COUNT must be a valid integer")
+		}
+		if parsed <= 0 {
+			return LedgerWorkerConfig{}, errors.New("WORKER_COUNT must be greater than 0")
+		}
+		workerCount = parsed
+	}
+
+	return LedgerWorkerConfig{
+		DatabaseURL: databaseURL,
+		WorkerCount: workerCount,
+	}, nil
 }
