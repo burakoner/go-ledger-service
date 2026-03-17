@@ -3,7 +3,9 @@ package httpapi
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -21,6 +23,7 @@ type LedgerAPI struct {
 	tenantAuthService service.TenantAuthService
 	ledgerQuery       service.LedgerQueryService
 	transactionQuery  service.TransactionQueryService
+	transactionCmd    service.TransactionCommandService
 }
 
 func NewLedgerAPI(
@@ -28,12 +31,14 @@ func NewLedgerAPI(
 	tenantAuthService service.TenantAuthService,
 	ledgerQuery service.LedgerQueryService,
 	transactionQuery service.TransactionQueryService,
+	transactionCmd service.TransactionCommandService,
 ) *LedgerAPI {
 	return &LedgerAPI{
 		db:                db,
 		tenantAuthService: tenantAuthService,
 		ledgerQuery:       ledgerQuery,
 		transactionQuery:  transactionQuery,
+		transactionCmd:    transactionCmd,
 	}
 }
 
@@ -251,15 +256,45 @@ func (a *LedgerAPI) handleTransactionsList(w http.ResponseWriter, r *http.Reques
 }
 
 func (a *LedgerAPI) handleTransactionsPlace(w http.ResponseWriter, r *http.Request) {
+	if a.transactionCmd == nil {
+		writeAPIError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "transaction command service is not configured")
+		return
+	}
+
 	tenantValue, ok := tenant.FromContext(r.Context())
 	if !ok {
 		writeAPIError(w, r, http.StatusInternalServerError, "TENANT_CONTEXT_MISSING", "tenant context is missing")
 		return
 	}
 
-	writeJSON(w, http.StatusNotImplemented, map[string]string{
-		"message":   "transactions endpoint will be implemented in next step",
-		"tenant_id": tenantValue.TenantID,
+	req, err := decodeCreateTransactionRequest(r)
+	if err != nil {
+		writeAPIError(w, r, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+
+	result, err := a.transactionCmd.CreatePendingTransaction(r.Context(), tenantValue, service.CreatePendingTransactionInput{
+		Reference:   req.Reference,
+		Type:        req.Type,
+		Amount:      req.Amount,
+		Description: req.Description,
+		Metadata:    req.Metadata,
+	})
+	if err != nil {
+		if errors.Is(err, service.ErrInvalidTransactionInput) {
+			writeAPIError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
+			return
+		}
+
+		log.Printf("create pending transaction failed: %v", err)
+		writeAPIError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create transaction")
+		return
+	}
+
+	writeJSON(w, http.StatusAccepted, map[string]interface{}{
+		"tenant_id":    tenantValue.TenantID,
+		"transaction":  result,
+		"queue_status": "TODO_RABBITMQ_PUBLISH",
 	})
 }
 
@@ -347,4 +382,40 @@ func parseTransactionIDFromPath(path string) (string, error) {
 	}
 
 	return transactionID, nil
+}
+
+type createTransactionRequest struct {
+	Reference   string          `json:"reference"`
+	Type        string          `json:"type"`
+	Amount      int64           `json:"amount"`
+	Description string          `json:"description"`
+	Metadata    json.RawMessage `json:"metadata"`
+}
+
+func decodeCreateTransactionRequest(r *http.Request) (createTransactionRequest, error) {
+	defer func() {
+		_ = r.Body.Close()
+	}()
+
+	var req createTransactionRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&req); err != nil {
+		return createTransactionRequest{}, fmtJSONDecodeError(err)
+	}
+
+	var extra struct{}
+	if err := decoder.Decode(&extra); err != io.EOF {
+		return createTransactionRequest{}, errors.New("request body must contain only one JSON object")
+	}
+
+	return req, nil
+}
+
+func fmtJSONDecodeError(err error) error {
+	if errors.Is(err, io.EOF) {
+		return errors.New("request body is required")
+	}
+	return errors.New("invalid JSON body: " + err.Error())
 }

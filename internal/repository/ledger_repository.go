@@ -43,6 +43,14 @@ type TransactionRow struct {
 	ProcessedAt   *time.Time
 }
 
+type CreatePendingTransactionParams struct {
+	Reference   string
+	Type        string
+	Amount      int64
+	Description string
+	Metadata    []byte
+}
+
 type PostgresLedgerRepository struct {
 	db *sql.DB
 }
@@ -52,6 +60,7 @@ type LedgerRepository interface {
 	ListLedgerEntries(ctx context.Context, tenantSchema string, limit, offset int) ([]LedgerEntryRow, error)
 	GetTransactionByID(ctx context.Context, tenantSchema, transactionID string) (TransactionRow, error)
 	ListTransactions(ctx context.Context, tenantSchema, status string, limit, offset int) ([]TransactionRow, error)
+	CreatePendingTransaction(ctx context.Context, tenantSchema string, params CreatePendingTransactionParams) (TransactionRow, error)
 }
 
 func NewPostgresLedgerRepository(db *sql.DB) *PostgresLedgerRepository {
@@ -299,4 +308,88 @@ func (r *PostgresLedgerRepository) ListTransactions(ctx context.Context, tenantS
 	}
 
 	return result, nil
+}
+
+func (r *PostgresLedgerRepository) CreatePendingTransaction(ctx context.Context, tenantSchema string, params CreatePendingTransactionParams) (TransactionRow, error) {
+	if r == nil || r.db == nil {
+		return TransactionRow{}, errors.New("transaction write repository is not initialized")
+	}
+	if !tenant.IsValidSchemaName(tenantSchema) {
+		return TransactionRow{}, errors.New("invalid tenant schema name")
+	}
+
+	queryCtx, cancel := context.WithTimeout(ctx, ledgerTimeout)
+	defer cancel()
+
+	query := fmt.Sprintf(
+		`INSERT INTO %s.transactions (
+			reference,
+			type,
+			amount,
+			description,
+			metadata,
+			status
+		)
+		VALUES ($1, $2, $3, $4, $5::jsonb, 'pending')
+		RETURNING
+			id::text,
+			reference,
+			type,
+			amount,
+			description,
+			metadata,
+			status,
+			failure_code,
+			failure_reason,
+			created_at,
+			updated_at,
+			processed_at`,
+		pq.QuoteIdentifier(tenantSchema),
+	)
+
+	var row TransactionRow
+	var failureCode sql.NullString
+	var failureReason sql.NullString
+	var processedAt sql.NullTime
+
+	err := r.db.QueryRowContext(
+		queryCtx,
+		query,
+		params.Reference,
+		params.Type,
+		params.Amount,
+		params.Description,
+		params.Metadata,
+	).Scan(
+		&row.ID,
+		&row.Reference,
+		&row.Type,
+		&row.Amount,
+		&row.Description,
+		&row.Metadata,
+		&row.Status,
+		&failureCode,
+		&failureReason,
+		&row.CreatedAt,
+		&row.UpdatedAt,
+		&processedAt,
+	)
+	if err != nil {
+		return TransactionRow{}, fmt.Errorf("create pending transaction in schema %q: %w", tenantSchema, err)
+	}
+
+	if failureCode.Valid {
+		value := failureCode.String
+		row.FailureCode = &value
+	}
+	if failureReason.Valid {
+		value := failureReason.String
+		row.FailureReason = &value
+	}
+	if processedAt.Valid {
+		value := processedAt.Time
+		row.ProcessedAt = &value
+	}
+
+	return row, nil
 }

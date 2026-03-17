@@ -41,9 +41,16 @@ func main() {
 	tenantAuthService := service.NewTenantAuthService(tenantRepo)
 	ledgerQueryService := service.NewLedgerQueryService(ledgerRepo)
 	transactionQueryService := service.NewTransactionQueryService(ledgerRepo)
+	transactionCommandService := service.NewTransactionCommandService(ledgerRepo)
 
 	// HTTP API
-	ledgerAPI := httpapi.NewLedgerAPI(postgresDB, tenantAuthService, ledgerQueryService, transactionQueryService)
+	ledgerAPI := httpapi.NewLedgerAPI(
+		postgresDB,
+		tenantAuthService,
+		ledgerQueryService,
+		transactionQueryService,
+		transactionCommandService,
+	)
 
 	addr := ":" + cfg.Port
 	log.Printf("Tenant Ledger API is starting on %s", addr)

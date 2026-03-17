@@ -29,10 +29,10 @@ const (
 var tenantSchemaPattern = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
 type tenantRegisterRequest struct {
-	TenantCode string                 `json:"tenant_code"`
-	Name       string                 `json:"name"`
-	Currency   string                 `json:"currency"`
-	Configs    map[string]interface{} `json:"configs"`
+	TenantCode string         `json:"tenant_code"`
+	Name       string         `json:"name"`
+	Currency   string         `json:"currency"`
+	Configs    map[string]any `json:"configs"`
 }
 
 type tenantRegisterResponse struct {
@@ -266,7 +266,7 @@ func applyTenantSchemaMigration(ctx context.Context, tx *sql.Tx, tenantSchema, m
 	return nil
 }
 
-func upsertTenantConfigs(ctx context.Context, tx *sql.Tx, tenantID string, configs map[string]interface{}) error {
+func upsertTenantConfigs(ctx context.Context, tx *sql.Tx, tenantID string, configs map[string]any) error {
 	if len(configs) == 0 {
 		return nil
 	}
@@ -333,7 +333,7 @@ func validateTenantRegisterRequest(req *tenantRegisterRequest) error {
 	}
 }
 
-func decodeJSONBody(r *http.Request, dst interface{}) error {
+func decodeJSONBody(r *http.Request, dst any) error {
 	defer func() {
 		_ = r.Body.Close()
 	}()
@@ -348,7 +348,7 @@ func decodeJSONBody(r *http.Request, dst interface{}) error {
 	return nil
 }
 
-func writeJSON(w http.ResponseWriter, statusCode int, payload interface{}) {
+func writeJSON(w http.ResponseWriter, statusCode int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 	if err := json.NewEncoder(w).Encode(payload); err != nil {
