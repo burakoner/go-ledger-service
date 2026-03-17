@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS public.tenant_accounts (
     name TEXT NOT NULL,
     currency CHAR(3) NOT NULL CHECK (currency IN ('GBP', 'EUR', 'USD', 'TRY')),
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended')),
-    tenant_schema TEXT NOT NULL UNIQUE,
+    schema TEXT NOT NULL UNIQUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

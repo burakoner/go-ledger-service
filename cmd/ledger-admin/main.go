@@ -238,7 +238,7 @@ func (a *tenantAdminAPI) registerTenant(ctx context.Context, req registerTenantR
 
 	// Insert tenant account metadata.
 	const insertTenantSQL = `
-		INSERT INTO public.tenant_accounts (id, code, name, currency, status, tenant_schema)
+		INSERT INTO public.tenant_accounts (id, code, name, currency, status, schema)
 		VALUES ($1, $2, $3, $4, 'active', $5)
 	`
 	if _, err := tx.ExecContext(ctx, insertTenantSQL, tenantID, req.TenantCode, req.Name, req.Currency, tenantSchema); err != nil {
@@ -440,7 +440,7 @@ func hashAPIKey(plainAPIKey string) string {
 
 // makeTenantSchemaName creates a deterministic tenant schema name from tenant UUID.
 func makeTenantSchemaName(tenantID string) string {
-	return "tenant_" + strings.ReplaceAll(strings.ToLower(tenantID), "-", "_")
+	return "tenant_" + strings.ReplaceAll(strings.ToLower(tenantID), "-", "")
 }
 
 // isValidSchemaName validates schema identifier format before dynamic SQL usage.
