@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math/big"
 	"net/http"
 	"os"
 	"regexp"
@@ -22,6 +23,7 @@ import (
 const (
 	defaultTenantSchemaMigrationPath = "migrations/0002_init_tenant_schema.sql"
 	tenantSchemaPlaceholder          = "__TENANT_SCHEMA__"
+	apiKeyAlphabet                   = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 )
 
 var tenantSchemaPattern = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
@@ -34,10 +36,10 @@ type registerTenantRequest struct {
 }
 
 type registerTenantResponse struct {
-	TenantAccountID string `json:"tenant_account_id"`
-	TenantSchema    string `json:"tenant_schema"`
-	APIKeyID        string `json:"api_key_id"`
-	APIKey          string `json:"api_key"`
+	TenantID     string `json:"id"`
+	TenantSchema string `json:"schema"`
+	APIKeyID     string `json:"api_key_id"`
+	APIKey       string `json:"api_key"`
 }
 
 type errorResponse struct {
@@ -53,6 +55,7 @@ type tenantAdminAPI struct {
 	adminKey              string
 }
 
+// main starts the ledger-admin API process.
 func main() {
 	// Get service port
 	port := os.Getenv("PORT")
@@ -122,7 +125,7 @@ func main() {
 	}
 }
 
-// Reads the SQL template used for tenant schema creation.
+// loadTenantSchemaMigrationSQL reads the SQL template used for tenant schema creation.
 func loadTenantSchemaMigrationSQL(path string) (string, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -140,23 +143,20 @@ func loadTenantSchemaMigrationSQL(path string) (string, error) {
 	return sqlText, nil
 }
 
-// handleRoot returns a basic service identity message.
+// handleRoot returns a plain text readiness message.
 func (a *tenantAdminAPI) handleRoot(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeAPIError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "only GET is allowed")
+		writeAPIError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only GET is allowed")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{
-		"service": "ledger-admin-api",
-		"status":  "ok",
-	})
+	writeText(w, http.StatusOK, "Ready")
 }
 
 // handleHealth checks service and database availability.
 func (a *tenantAdminAPI) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeAPIError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "only GET is allowed")
+		writeAPIError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only GET is allowed")
 		return
 	}
 
@@ -169,14 +169,15 @@ func (a *tenantAdminAPI) handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{
-		"status": "OK",
+		"service": "ledger-admin-api",
+		"status":  "HEALTHY",
 	})
 }
 
 // handleRegisterTenant registers a tenant and creates the first API key.
 func (a *tenantAdminAPI) handleRegisterTenant(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeAPIError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "only POST is allowed")
+		writeAPIError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only POST is allowed")
 		return
 	}
 	if !a.isAdminAuthorized(r) {
@@ -225,22 +226,22 @@ func (a *tenantAdminAPI) registerTenant(ctx context.Context, req registerTenantR
 	}()
 
 	// Create a tenant UUID in DB and derive a safe schema name from it.
-	var tenantAccountID string
-	if err := tx.QueryRowContext(ctx, "SELECT gen_random_uuid()::text").Scan(&tenantAccountID); err != nil {
+	var tenantID string
+	if err := tx.QueryRowContext(ctx, "SELECT gen_random_uuid()::text").Scan(&tenantID); err != nil {
 		return registerTenantResponse{}, fmt.Errorf("generate tenant id: %w", err)
 	}
 
-	tenantSchema := makeTenantSchemaName(tenantAccountID)
+	tenantSchema := makeTenantSchemaName(tenantID)
 	if !isValidSchemaName(tenantSchema) {
 		return registerTenantResponse{}, fmt.Errorf("invalid schema name generated: %s", tenantSchema)
 	}
 
 	// Insert tenant account metadata.
 	const insertTenantSQL = `
-		INSERT INTO public.tenant_accounts (id, tenant_code, name, currency, status, tenant_schema)
+		INSERT INTO public.tenant_accounts (id, code, name, currency, status, tenant_schema)
 		VALUES ($1, $2, $3, $4, 'active', $5)
 	`
-	if _, err := tx.ExecContext(ctx, insertTenantSQL, tenantAccountID, req.TenantCode, req.Name, req.Currency, tenantSchema); err != nil {
+	if _, err := tx.ExecContext(ctx, insertTenantSQL, tenantID, req.TenantCode, req.Name, req.Currency, tenantSchema); err != nil {
 		return registerTenantResponse{}, fmt.Errorf("insert tenant account: %w", err)
 	}
 
@@ -250,12 +251,12 @@ func (a *tenantAdminAPI) registerTenant(ctx context.Context, req registerTenantR
 	}
 
 	// Store optional tenant config values.
-	if err := upsertTenantConfigs(ctx, tx, tenantAccountID, req.Configs); err != nil {
+	if err := upsertTenantConfigs(ctx, tx, tenantID, req.Configs); err != nil {
 		return registerTenantResponse{}, fmt.Errorf("upsert tenant configs: %w", err)
 	}
 
 	// Create the initial API key and store only its hash.
-	apiKeyID, plainAPIKey, err := insertTenantAPIKey(ctx, tx, tenantAccountID)
+	apiKeyID, plainAPIKey, err := insertTenantAPIKey(ctx, tx, tenantID)
 	if err != nil {
 		return registerTenantResponse{}, fmt.Errorf("insert first api key: %w", err)
 	}
@@ -265,10 +266,10 @@ func (a *tenantAdminAPI) registerTenant(ctx context.Context, req registerTenantR
 	}
 
 	return registerTenantResponse{
-		TenantAccountID: tenantAccountID,
-		TenantSchema:    tenantSchema,
-		APIKeyID:        apiKeyID,
-		APIKey:          plainAPIKey,
+		TenantID:     tenantID,
+		TenantSchema: tenantSchema,
+		APIKeyID:     apiKeyID,
+		APIKey:       plainAPIKey,
 	}, nil
 }
 
@@ -291,15 +292,15 @@ func applyTenantSchemaMigration(ctx context.Context, tx *sql.Tx, tenantSchema, m
 }
 
 // upsertTenantConfigs stores provided config values for the given tenant.
-func upsertTenantConfigs(ctx context.Context, tx *sql.Tx, tenantAccountID string, configs map[string]interface{}) error {
+func upsertTenantConfigs(ctx context.Context, tx *sql.Tx, tenantID string, configs map[string]interface{}) error {
 	if len(configs) == 0 {
 		return nil
 	}
 
 	const upsertConfigSQL = `
-		INSERT INTO public.tenant_configs (tenant_account_id, key, value, updated_at)
+		INSERT INTO public.tenant_configs (tenant_id, key, value, updated_at)
 		VALUES ($1, $2, $3::jsonb, now())
-		ON CONFLICT (tenant_account_id, key)
+		ON CONFLICT (tenant_id, key)
 		DO UPDATE SET value = EXCLUDED.value, updated_at = now()
 	`
 
@@ -309,7 +310,7 @@ func upsertTenantConfigs(ctx context.Context, tx *sql.Tx, tenantAccountID string
 			return fmt.Errorf("marshal config %q: %w", key, err)
 		}
 
-		if _, err := tx.ExecContext(ctx, upsertConfigSQL, tenantAccountID, key, string(rawValue)); err != nil {
+		if _, err := tx.ExecContext(ctx, upsertConfigSQL, tenantID, key, string(rawValue)); err != nil {
 			return fmt.Errorf("upsert config %q: %w", key, err)
 		}
 	}
@@ -318,7 +319,7 @@ func upsertTenantConfigs(ctx context.Context, tx *sql.Tx, tenantAccountID string
 }
 
 // insertTenantAPIKey creates a new API key row and returns its public and secret parts.
-func insertTenantAPIKey(ctx context.Context, tx *sql.Tx, tenantAccountID string) (string, string, error) {
+func insertTenantAPIKey(ctx context.Context, tx *sql.Tx, tenantID string) (string, string, error) {
 	plainAPIKey, err := generatePlainAPIKey()
 	if err != nil {
 		return "", "", fmt.Errorf("generate plain api key: %w", err)
@@ -326,13 +327,13 @@ func insertTenantAPIKey(ctx context.Context, tx *sql.Tx, tenantAccountID string)
 	hashedAPIKey := hashAPIKey(plainAPIKey)
 
 	const insertAPIKeySQL = `
-		INSERT INTO public.tenant_api_keys (tenant_account_id, api_key_hash, status)
+		INSERT INTO public.tenant_api_keys (tenant_id, api_key_hash, status)
 		VALUES ($1, $2, 'active')
-		RETURNING api_key_id::text
+		RETURNING id::text
 	`
 
 	var apiKeyID string
-	if err := tx.QueryRowContext(ctx, insertAPIKeySQL, tenantAccountID, hashedAPIKey).Scan(&apiKeyID); err != nil {
+	if err := tx.QueryRowContext(ctx, insertAPIKeySQL, tenantID, hashedAPIKey).Scan(&apiKeyID); err != nil {
 		return "", "", fmt.Errorf("insert tenant api key row: %w", err)
 	}
 
@@ -385,6 +386,15 @@ func writeJSON(w http.ResponseWriter, statusCode int, payload interface{}) {
 	}
 }
 
+// writeText writes a plain text response with the given status code.
+func writeText(w http.ResponseWriter, statusCode int, text string) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(statusCode)
+	if _, err := w.Write([]byte(text)); err != nil {
+		log.Printf("failed to write text response: %v", err)
+	}
+}
+
 // writeAPIError writes a standardized error response body.
 func writeAPIError(w http.ResponseWriter, statusCode int, code, message string) {
 	resp := errorResponse{}
@@ -395,11 +405,31 @@ func writeAPIError(w http.ResponseWriter, statusCode int, code, message string) 
 
 // generatePlainAPIKey creates a random API key value shown only once to caller.
 func generatePlainAPIKey() (string, error) {
-	randomBytes := make([]byte, 24)
-	if _, err := rand.Read(randomBytes); err != nil {
-		return "", fmt.Errorf("generate random bytes: %w", err)
+	randomPart, err := generateRandomString(48)
+	if err != nil {
+		return "", fmt.Errorf("generate random api key part: %w", err)
 	}
-	return "tk_" + hex.EncodeToString(randomBytes), nil
+	return "TK_" + randomPart, nil
+}
+
+// generateRandomString generates a cryptographically secure random string using a-zA-Z0-9 characters.
+func generateRandomString(length int) (string, error) {
+	if length <= 0 {
+		return "", errors.New("length must be greater than 0")
+	}
+
+	result := make([]byte, length)
+	max := big.NewInt(int64(len(apiKeyAlphabet)))
+
+	for i := 0; i < length; i++ {
+		n, err := rand.Int(rand.Reader, max)
+		if err != nil {
+			return "", fmt.Errorf("generate random index: %w", err)
+		}
+		result[i] = apiKeyAlphabet[n.Int64()]
+	}
+
+	return string(result), nil
 }
 
 // hashAPIKey creates a deterministic SHA-256 hash used for secure DB storage.
@@ -409,8 +439,8 @@ func hashAPIKey(plainAPIKey string) string {
 }
 
 // makeTenantSchemaName creates a deterministic tenant schema name from tenant UUID.
-func makeTenantSchemaName(tenantAccountID string) string {
-	return "tenant_" + strings.ReplaceAll(strings.ToLower(tenantAccountID), "-", "_")
+func makeTenantSchemaName(tenantID string) string {
+	return "tenant_" + strings.ReplaceAll(strings.ToLower(tenantID), "-", "_")
 }
 
 // isValidSchemaName validates schema identifier format before dynamic SQL usage.
@@ -423,5 +453,5 @@ func isUniqueViolation(err error) bool {
 	if err == nil {
 		return false
 	}
-	return strings.Contains(err.Error(), "SQLSTATE 23505")
+	return strings.Contains(err.Error(), "(23505)")
 }
