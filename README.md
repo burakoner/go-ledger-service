@@ -16,7 +16,7 @@ curl http://localhost:8081/health
 
 ## Mimari Genel Bakış
 
-Bu proje küçük bir servis ayrımı kullanır: `ledger-api` (çalışma zamanı transaction API), `ledger-admin` (tenant onboarding API) ve `ledger-worker` (asenkron worker süreci). Altyapı servisleri PostgreSQL (ana veri kaynağı), Redis (hızlı geçici kontrol katmanı) ve RabbitMQ’dur (API ile worker arasında mesaj taşıma). Kod yapısı `handler -> service -> repository` ayrımıyla düzenlenmiştir.
+Bu proje küçük bir servis ayrımı kullanır: `ledger-api` (çalışma zamanı transaction API), `ledger-admin` (tenant onboarding API) ve `ledger-worker` (asenkron worker süreci). Altyapı servisleri PostgreSQL (ana veri kaynağı) ve Redis’tir (hızlı geçici kontrol katmanı). Asenkron transaction akışı için `pending` kayıtlar PostgreSQL üzerinde tutulur ve worker tarafından işlenir. Kod yapısı `handler -> service -> repository` ayrımıyla düzenlenmiştir.
 
 ## Schema-Per-Tenant İzolasyonu
 
@@ -43,10 +43,10 @@ Gerekçe: Redis düşük gecikmeli key kontrolü ve doğal süre sonu (expiratio
 - Artı: daha güçlü mantıksal izolasyon sınırı sağlar.
 - Eksi: dinamik şema oluşturma ve migration orkestrasyonu daha karmaşık hale gelir.
 
-3. Asenkron işleme RabbitMQ + worker ile ayrıştırıldı.
+3. Asenkron işleme PostgreSQL `pending` queue + worker ile ayrıştırıldı.
 
-- Artı: API, arka plan işleme sürerken daha hızlı yanıt verir.
-- Eksi: kuyruk gözlemlenebilirliği, retry davranışı ve hata yönetimi açısından ek operasyonel yük getirir.
+- Artı: ek broker bağımlılığı olmadan API ve worker ayrımı korunur.
+- Eksi: yüksek tenant sayısında worker tarama stratejisi dikkatli tasarlanmalıdır.
 
 4. Idempotency ve rate limit kontrolleri PostgreSQL dışında Redis’te tutuldu.
 
@@ -65,6 +65,8 @@ Gerekçe: Redis düşük gecikmeli key kontrolü ve doğal süre sonu (expiratio
 8. Migration rollout sürecinin otomasyonla güvenli hale getirilmesi (sıralı çalıştırma, doğrulama, geri dönüş planı).
 9. Ortam güvenlik kontrollerinin otomatikleştirilmesi (yanlış ortam koruması, zorunlu env/secrets doğrulaması).
 10. Servis logları ve audit logları için uçtan uca bir loglama kurgusunun kurulması, audit kayıtlarının append-only/değiştirilemez yapıda tutulması ve merkezi toplama ile saklama/erişim politikalarının tanımlanması.
+11. Tenant `suspended` durumuna alındığında API ve worker davranışının net politika ile tamamlanması (yeni istek reddi, pending işlemlerin deterministik yönetimi).
+12. Tenant durumu değişirken in-flight transaction yarışlarının (race) işlem öncesi son durum kontrolü ve test senaryolarıyla güvence altına alınması.
 
 ## Notlar
 
