@@ -12,11 +12,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/burakoner/go-ledger-service/internal/idempotency"
 	"github.com/burakoner/go-ledger-service/internal/service"
 	"github.com/burakoner/go-ledger-service/internal/tenant"
 )
 
-const healthTimeout = 2 * time.Second
+const (
+	healthTimeout             = 2 * time.Second
+	transactionIdempotencyTTL = 24 * time.Hour
+)
 
 type LedgerAPI struct {
 	db                 *sql.DB
@@ -24,6 +28,7 @@ type LedgerAPI struct {
 	ledgerBalance      service.LedgerBalanceService
 	ledgerEntry        service.LedgerEntryService
 	transactionService service.LedgerTransactionService
+	idempotencyStore   idempotency.ReferenceStore
 }
 
 func NewLedgerAPI(
@@ -32,6 +37,7 @@ func NewLedgerAPI(
 	ledgerBalance service.LedgerBalanceService,
 	ledgerEntry service.LedgerEntryService,
 	transactionService service.LedgerTransactionService,
+	idempotencyStore idempotency.ReferenceStore,
 ) *LedgerAPI {
 	return &LedgerAPI{
 		db:                 db,
@@ -39,6 +45,7 @@ func NewLedgerAPI(
 		ledgerBalance:      ledgerBalance,
 		ledgerEntry:        ledgerEntry,
 		transactionService: transactionService,
+		idempotencyStore:   idempotencyStore,
 	}
 }
 
@@ -260,6 +267,10 @@ func (a *LedgerAPI) handleTransactionPlace(w http.ResponseWriter, r *http.Reques
 		writeAPIError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "transaction service is not configured")
 		return
 	}
+	if a.idempotencyStore == nil {
+		writeAPIError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "idempotency store is not configured")
+		return
+	}
 
 	tenantValue, ok := tenant.FromContext(r.Context())
 	if !ok {
@@ -273,6 +284,53 @@ func (a *LedgerAPI) handleTransactionPlace(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	beginState, err := a.idempotencyStore.Begin(
+		r.Context(),
+		tenantValue.TenantID,
+		req.Reference,
+		requestIDFromContext(r.Context()),
+		transactionIdempotencyTTL,
+	)
+	if err != nil {
+		log.Printf("idempotency begin failed: %v", err)
+		writeAPIError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to start idempotency control")
+		return
+	}
+
+	if !beginState.Acquired {
+		if beginState.CompletedTransactionID != "" {
+			existingByID, byIDErr := a.transactionService.GetTransactionByID(r.Context(), tenantValue, beginState.CompletedTransactionID)
+			if byIDErr == nil {
+				writeTransactionReplayResponse(w, tenantValue.TenantID, existingByID)
+				return
+			}
+			log.Printf("idempotency cached transaction lookup failed: %v", byIDErr)
+		}
+
+		existingByReference, byReferenceErr := a.transactionService.GetTransactionByReference(r.Context(), tenantValue, req.Reference)
+		if byReferenceErr == nil {
+			if markErr := a.idempotencyStore.MarkCompleted(
+				r.Context(),
+				tenantValue.TenantID,
+				req.Reference,
+				existingByReference.ID,
+				transactionIdempotencyTTL,
+			); markErr != nil {
+				log.Printf("idempotency mark completed failed: %v", markErr)
+			}
+			writeTransactionReplayResponse(w, tenantValue.TenantID, existingByReference)
+			return
+		}
+		if !errors.Is(byReferenceErr, service.ErrTransactionNotFound) {
+			log.Printf("idempotency fallback lookup failed: %v", byReferenceErr)
+			writeAPIError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to resolve idempotent request")
+			return
+		}
+
+		writeAPIError(w, r, http.StatusConflict, "IDEMPOTENCY_IN_PROGRESS", "another request with same reference is in progress")
+		return
+	}
+
 	result, err := a.transactionService.CreatePendingTransaction(r.Context(), tenantValue, service.CreatePendingTransactionInput{
 		Reference:   req.Reference,
 		Type:        req.Type,
@@ -281,6 +339,28 @@ func (a *LedgerAPI) handleTransactionPlace(w http.ResponseWriter, r *http.Reques
 		Metadata:    req.Metadata,
 	})
 	if err != nil {
+		if errors.Is(err, service.ErrTransactionReferenceAlreadyExists) {
+			existingByReference, byReferenceErr := a.transactionService.GetTransactionByReference(r.Context(), tenantValue, req.Reference)
+			if byReferenceErr == nil {
+				if markErr := a.idempotencyStore.MarkCompleted(
+					r.Context(),
+					tenantValue.TenantID,
+					req.Reference,
+					existingByReference.ID,
+					transactionIdempotencyTTL,
+				); markErr != nil {
+					log.Printf("idempotency mark completed failed after duplicate: %v", markErr)
+				}
+				writeTransactionReplayResponse(w, tenantValue.TenantID, existingByReference)
+				return
+			}
+			log.Printf("reference duplicate fallback failed: %v", byReferenceErr)
+		}
+
+		if clearErr := a.idempotencyStore.Clear(r.Context(), tenantValue.TenantID, req.Reference); clearErr != nil {
+			log.Printf("idempotency clear failed after create error: %v", clearErr)
+		}
+
 		if errors.Is(err, service.ErrInvalidTransactionInput) {
 			writeAPIError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 			return
@@ -289,6 +369,17 @@ func (a *LedgerAPI) handleTransactionPlace(w http.ResponseWriter, r *http.Reques
 		log.Printf("create pending transaction failed: %v", err)
 		writeAPIError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create transaction")
 		return
+	}
+
+	if markErr := a.idempotencyStore.MarkCompleted(
+		r.Context(),
+		tenantValue.TenantID,
+		req.Reference,
+		result.ID,
+		transactionIdempotencyTTL,
+	); markErr != nil {
+		// Transaction is already stored in DB. We only log redis failure.
+		log.Printf("idempotency mark completed failed: %v", markErr)
 	}
 
 	writeJSON(w, http.StatusAccepted, map[string]interface{}{
@@ -339,6 +430,15 @@ func (a *LedgerAPI) handleTransactionByID(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"tenant_id":   tenantValue.TenantID,
 		"transaction": transactionResult,
+	})
+}
+
+func writeTransactionReplayResponse(w http.ResponseWriter, tenantID string, transaction service.TransactionResult) {
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"tenant_id":            tenantID,
+		"transaction":          transaction,
+		"idempotency_replayed": true,
+		"queue_status":         "TODO_RABBITMQ_PUBLISH",
 	})
 }
 
