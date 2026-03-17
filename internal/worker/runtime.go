@@ -18,7 +18,7 @@ import (
 const (
 	tenantRefreshInterval   = 15 * time.Second
 	tenantDispatchInterval  = 2 * time.Second
-	webhookDispatchInterval = 2 * time.Second
+	webhookDispatchInterval = 15 * time.Second
 	tenantQueryTimeout      = 5 * time.Second
 	jobQueueMultiplier      = 8
 )

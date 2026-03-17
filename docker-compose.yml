@@ -70,6 +70,27 @@ services:
     networks:
       - ledger-net
 
+  webhook-receiver:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_PATH: ./cmd/webhook-receiver
+    container_name: go-ledger-webhook-receiver
+    restart: unless-stopped
+    ports:
+      - ${WEBHOOK_RECEIVER_PORT:-8088}:${WEBHOOK_RECEIVER_PORT:-8088}
+    environment:
+      WEBHOOK_RECEIVER_PORT: ${WEBHOOK_RECEIVER_PORT:-8088}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:${WEBHOOK_RECEIVER_PORT:-8088}/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - ledger-net
+
   postgres:
     image: postgres:18.3-alpine
     container_name: go-ledger-postgres
