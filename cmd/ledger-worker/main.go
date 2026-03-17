@@ -1,17 +1,13 @@
 package main
 
 import (
-	"log"
-	"os"
+	"github.com/burakoner/go-ledger-service/internal/config"
+	"github.com/burakoner/go-ledger-service/internal/worker"
 )
 
-// main prints runtime environment values for quick verification and exits.
+// main starts the worker entrypoint and runs the current env-check behavior.
 func main() {
-	log.Printf("Ledger worker env check started.")
-	log.Printf("DATABASE_URL=%q", os.Getenv("DATABASE_URL"))
-	log.Printf("REDIS_ADDR=%q", os.Getenv("REDIS_ADDR"))
-	log.Printf("RABBITMQ_URL=%q", os.Getenv("RABBITMQ_URL"))
-	log.Printf("RABBITMQ_USER=%q", os.Getenv("RABBITMQ_USER"))
-	log.Printf("RABBITMQ_PASSWORD=%q", os.Getenv("RABBITMQ_PASSWORD"))
-	log.Printf("Ledger worker env check completed. Exiting.")
+	cfg := config.LoadLedgerWorkerConfigFromEnv()
+	worker.RunEnvCheck(cfg)
 }
+
