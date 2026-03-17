@@ -1,8 +1,10 @@
 services:
-  app:
+  ledger-api:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        APP_PATH: ./cmd/ledger-api
     container_name: go-ledger-api
     restart: unless-stopped
     ports:
@@ -18,6 +20,33 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/api/v1/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - ledger-net
+
+  ledger-admin:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_PATH: ./cmd/ledger-admin
+    container_name: go-ledger-admin
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      PORT: "8081"
+      DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
+      TENANT_ADMIN_KEY: ${TENANT_ADMIN_KEY:-WX5TczRsQnCk7k8k9AXbsW5czRsQnCkg}
+      TENANT_SCHEMA_MIGRATION_PATH: "migrations/0002_init_tenant_schema.sql"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8081/api/v1/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
