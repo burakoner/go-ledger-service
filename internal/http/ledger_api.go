@@ -386,7 +386,7 @@ func (a *LedgerAPI) handleTransactionPlace(w http.ResponseWriter, r *http.Reques
 		"tenant_id":            tenantValue.TenantID,
 		"transaction":          result,
 		"idempotency_replayed": false,
-		"queue_status":         "TODO_RABBITMQ_PUBLISH",
+		"queue_status":         "PENDING_DB_QUEUE",
 	})
 }
 
@@ -439,7 +439,7 @@ func writeTransactionReplayResponse(w http.ResponseWriter, tenantID string, tran
 		"tenant_id":            tenantID,
 		"transaction":          transaction,
 		"idempotency_replayed": true,
-		"queue_status":         "TODO_RABBITMQ_PUBLISH",
+		"queue_status":         "PENDING_DB_QUEUE",
 	})
 }
 

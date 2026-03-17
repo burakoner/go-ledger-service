@@ -13,13 +13,10 @@ services:
       PORT: ${LEDGER_API_PORT:-8080}
       DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
       REDIS_ADDR: "redis:6379"
-      RABBITMQ_URL: "amqp://${RABBITMQ_USER:-ledger}:${RABBITMQ_PASSWORD:-ledger}@rabbitmq:5672/"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      rabbitmq:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/health || exit 1"]
@@ -66,16 +63,9 @@ services:
     container_name: go-ledger-worker
     environment:
       DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
-      REDIS_ADDR: "redis:6379"
-      RABBITMQ_URL: "amqp://${RABBITMQ_USER:-ledger}:${RABBITMQ_PASSWORD:-ledger}@rabbitmq:5672/"
-      RABBITMQ_USER: "${RABBITMQ_USER:-ledger}"
-      RABBITMQ_PASSWORD: "${RABBITMQ_PASSWORD:-ledger}"
+      WORKER_COUNT: "${WORKER_COUNT:-2}"
     depends_on:
       postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      rabbitmq:
         condition: service_healthy
     networks:
       - ledger-net
@@ -106,26 +96,6 @@ services:
     networks:
       - ledger-net
 
-  rabbitmq:
-    image: rabbitmq:3.13-management-alpine
-    container_name: go-ledger-rabbitmq
-    restart: unless-stopped
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-ledger}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-ledger}
-    healthcheck:
-      test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-    networks:
-      - ledger-net
-
   redis:
     image: redis:8-alpine
     container_name: go-ledger-redis
@@ -145,7 +115,6 @@ services:
 
 volumes:
   postgres_data:
-  rabbitmq_data:
   redis_data:
 
 networks:
