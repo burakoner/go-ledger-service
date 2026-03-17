@@ -8,8 +8,9 @@ import (
 
 type errorResponse struct {
 	Error struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
+		Code      string `json:"code"`
+		Message   string `json:"message"`
+		RequestID string `json:"request_id"`
 	} `json:"error"`
 }
 
@@ -22,20 +23,17 @@ func writeJSON(w http.ResponseWriter, statusCode int, payload interface{}) {
 	}
 }
 
-// writeText writes a plain text response with status code.
-func writeText(w http.ResponseWriter, statusCode int, text string) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.WriteHeader(statusCode)
-	if _, err := w.Write([]byte(text)); err != nil {
-		log.Printf("failed to write text response: %v", err)
-	}
-}
-
 // writeAPIError writes a standardized API error payload.
-func writeAPIError(w http.ResponseWriter, statusCode int, code, message string) {
+func writeAPIError(w http.ResponseWriter, r *http.Request, statusCode int, code, message string) {
+	requestID := requestIDFromContext(r.Context())
+	if requestID == "" {
+		requestID = generateRequestID()
+	}
+	w.Header().Set(requestIDHeaderName, requestID)
+
 	resp := errorResponse{}
 	resp.Error.Code = code
 	resp.Error.Message = message
+	resp.Error.RequestID = requestID
 	writeJSON(w, statusCode, resp)
 }
-

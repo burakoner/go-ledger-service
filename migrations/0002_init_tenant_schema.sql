@@ -21,11 +21,11 @@ CREATE TABLE IF NOT EXISTS __TENANT_SCHEMA__.transactions (
 
 CREATE TABLE IF NOT EXISTS __TENANT_SCHEMA__.balances (
     id SMALLINT PRIMARY KEY,
-    available_balance BIGINT NOT NULL DEFAULT 0,
+    balance BIGINT NOT NULL DEFAULT 0,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO __TENANT_SCHEMA__.balances (id, available_balance)
+INSERT INTO __TENANT_SCHEMA__.balances (id, balance)
 VALUES (1, 0)
 ON CONFLICT (id) DO NOTHING;
 

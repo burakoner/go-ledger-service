@@ -34,9 +34,16 @@ func main() {
 		log.Fatalf("failed to ping database: %v", err)
 	}
 
+	// Repositories
 	tenantRepo := repository.NewPostgresTenantRepository(postgresDB)
+	ledgerReadRepo := repository.NewPostgresLedgerReadRepository(postgresDB)
+
+	// Services
 	tenantAuthService := service.NewTenantAuthService(tenantRepo)
-	ledgerAPI := httpapi.NewLedgerAPI(postgresDB, tenantAuthService)
+	ledgerQueryService := service.NewLedgerQueryService(ledgerReadRepo)
+
+	// HTTP API
+	ledgerAPI := httpapi.NewLedgerAPI(postgresDB, tenantAuthService, ledgerQueryService)
 
 	addr := ":" + cfg.Port
 	log.Printf("Tenant Ledger API is starting on %s", addr)
@@ -44,4 +51,3 @@ func main() {
 		log.Fatalf("Tenant Ledger API stopped: %v", err)
 	}
 }
-

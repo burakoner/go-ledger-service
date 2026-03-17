@@ -64,6 +64,7 @@ Gerekçe: Redis düşük gecikmeli key kontrolü ve doğal süre sonu (expiratio
 7. Gözlemlenebilirlik katmanının structured log, metrik, trace ve alarm bileşenleriyle güçlendirilmesi.
 8. Migration rollout sürecinin otomasyonla güvenli hale getirilmesi (sıralı çalıştırma, doğrulama, geri dönüş planı).
 9. Ortam güvenlik kontrollerinin otomatikleştirilmesi (yanlış ortam koruması, zorunlu env/secrets doğrulaması).
+10. Servis logları ve audit logları için uçtan uca bir loglama kurgusunun kurulması, audit kayıtlarının append-only/değiştirilemez yapıda tutulması ve merkezi toplama ile saklama/erişim politikalarının tanımlanması.
 
 ## Notlar
 

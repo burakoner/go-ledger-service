@@ -113,7 +113,6 @@ func main() {
 
 	// Configure HTTP routes.
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", api.handleRoot)
 	mux.HandleFunc("/health", api.handleHealth)
 	mux.HandleFunc("/api/v1/tenants/register", api.handleRegisterTenant)
 
@@ -140,16 +139,6 @@ func loadTenantSchemaMigrationSQL(path string) (string, error) {
 	}
 
 	return sqlText, nil
-}
-
-// handleRoot returns a plain text readiness message.
-func (a *tenantAdminAPI) handleRoot(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeAPIError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only GET is allowed")
-		return
-	}
-
-	writeText(w, http.StatusOK, "Ready")
 }
 
 // handleHealth checks service and database availability.
@@ -381,15 +370,6 @@ func writeJSON(w http.ResponseWriter, statusCode int, payload interface{}) {
 	w.WriteHeader(statusCode)
 	if err := json.NewEncoder(w).Encode(payload); err != nil {
 		log.Printf("failed to encode json response: %v", err)
-	}
-}
-
-// writeText writes a plain text response with the given status code.
-func writeText(w http.ResponseWriter, statusCode int, text string) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.WriteHeader(statusCode)
-	if _, err := w.Write([]byte(text)); err != nil {
-		log.Printf("failed to write text response: %v", err)
 	}
 }
 
