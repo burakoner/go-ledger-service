@@ -130,7 +130,7 @@ func (s *ledgerTransactionService) CreatePendingTransaction(ctx context.Context,
 		return TransactionResult{}, fmt.Errorf("create pending transaction: %w", err)
 	}
 
-	// TODO: Publish transaction-created event to RabbitMQ in next step.
+	// TODO: Notify worker loop to pick this pending transaction faster (LISTEN/NOTIFY or similar).
 	return mapTransactionRowToResult(row), nil
 }
 
