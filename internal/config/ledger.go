@@ -24,7 +24,7 @@ type LedgerWorkerConfig struct {
 
 // LoadLedgerAPIConfigFromEnv loads and validates ledger-api configuration from env vars.
 func LoadLedgerAPIConfigFromEnv() (LedgerAPIConfig, error) {
-	port := os.Getenv("PORT")
+	port := os.Getenv("LEDGER_API_PORT")
 	if port == "" {
 		port = "8080"
 	}
@@ -52,4 +52,3 @@ func LoadLedgerWorkerConfigFromEnv() LedgerWorkerConfig {
 		RabbitMQPassword: os.Getenv("RABBITMQ_PASSWORD"),
 	}
 }
-

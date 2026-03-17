@@ -57,9 +57,9 @@ type tenantAdminAPI struct {
 // main starts the ledger-admin API process.
 func main() {
 	// Get service port
-	port := os.Getenv("PORT")
+	port := os.Getenv("LEDGER_ADMIN_PORT")
 	if port == "" {
-		port = "8081"
+		port = "8090"
 	}
 
 	// Get database connection URL
