@@ -19,26 +19,26 @@ import (
 const healthTimeout = 2 * time.Second
 
 type LedgerAPI struct {
-	db                *sql.DB
-	tenantAuthService service.TenantAuthService
-	ledgerQuery       service.LedgerQueryService
-	transactionQuery  service.TransactionQueryService
-	transactionCmd    service.TransactionCommandService
+	db                 *sql.DB
+	tenantAuthService  service.TenantAuthService
+	ledgerBalance      service.LedgerBalanceService
+	ledgerEntry        service.LedgerEntryService
+	transactionService service.LedgerTransactionService
 }
 
 func NewLedgerAPI(
 	db *sql.DB,
 	tenantAuthService service.TenantAuthService,
-	ledgerQuery service.LedgerQueryService,
-	transactionQuery service.TransactionQueryService,
-	transactionCmd service.TransactionCommandService,
+	ledgerBalance service.LedgerBalanceService,
+	ledgerEntry service.LedgerEntryService,
+	transactionService service.LedgerTransactionService,
 ) *LedgerAPI {
 	return &LedgerAPI{
-		db:                db,
-		tenantAuthService: tenantAuthService,
-		ledgerQuery:       ledgerQuery,
-		transactionQuery:  transactionQuery,
-		transactionCmd:    transactionCmd,
+		db:                 db,
+		tenantAuthService:  tenantAuthService,
+		ledgerBalance:      ledgerBalance,
+		ledgerEntry:        ledgerEntry,
+		transactionService: transactionService,
 	}
 }
 
@@ -127,8 +127,8 @@ func (a *LedgerAPI) handleBalance(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, r, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only GET is allowed")
 		return
 	}
-	if a.ledgerQuery == nil {
-		writeAPIError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "ledger query service is not configured")
+	if a.ledgerBalance == nil {
+		writeAPIError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "ledger balance service is not configured")
 		return
 	}
 
@@ -138,7 +138,7 @@ func (a *LedgerAPI) handleBalance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	balance, err := a.ledgerQuery.GetBalance(r.Context(), tenantValue)
+	balance, err := a.ledgerBalance.GetBalance(r.Context(), tenantValue)
 	if err != nil {
 		log.Printf("get balance failed: %v", err)
 		writeAPIError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to fetch balance")
@@ -158,8 +158,8 @@ func (a *LedgerAPI) handleLedger(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, r, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only GET is allowed")
 		return
 	}
-	if a.ledgerQuery == nil {
-		writeAPIError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "ledger query service is not configured")
+	if a.ledgerEntry == nil {
+		writeAPIError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "ledger entry service is not configured")
 		return
 	}
 
@@ -175,7 +175,7 @@ func (a *LedgerAPI) handleLedger(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	entries, normalizedLimit, normalizedOffset, err := a.ledgerQuery.ListLedgerEntries(r.Context(), tenantValue, limit, offset)
+	entries, normalizedLimit, normalizedOffset, err := a.ledgerEntry.ListLedgerEntries(r.Context(), tenantValue, limit, offset)
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidPagination) {
 			writeAPIError(w, r, http.StatusBadRequest, "INVALID_PAGINATION", err.Error())
@@ -210,8 +210,8 @@ func (a *LedgerAPI) handleTransactions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *LedgerAPI) handleTransactionsList(w http.ResponseWriter, r *http.Request) {
-	if a.transactionQuery == nil {
-		writeAPIError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "transaction query service is not configured")
+	if a.transactionService == nil {
+		writeAPIError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "transaction service is not configured")
 		return
 	}
 
@@ -228,7 +228,7 @@ func (a *LedgerAPI) handleTransactionsList(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	transactions, normalizedStatus, normalizedLimit, normalizedOffset, err := a.transactionQuery.ListTransactions(
+	transactions, normalizedStatus, normalizedLimit, normalizedOffset, err := a.transactionService.ListTransactions(
 		r.Context(),
 		tenantValue,
 		statusFilter,
@@ -256,8 +256,8 @@ func (a *LedgerAPI) handleTransactionsList(w http.ResponseWriter, r *http.Reques
 }
 
 func (a *LedgerAPI) handleTransactionsPlace(w http.ResponseWriter, r *http.Request) {
-	if a.transactionCmd == nil {
-		writeAPIError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "transaction command service is not configured")
+	if a.transactionService == nil {
+		writeAPIError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "transaction service is not configured")
 		return
 	}
 
@@ -273,7 +273,7 @@ func (a *LedgerAPI) handleTransactionsPlace(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	result, err := a.transactionCmd.CreatePendingTransaction(r.Context(), tenantValue, service.CreatePendingTransactionInput{
+	result, err := a.transactionService.CreatePendingTransaction(r.Context(), tenantValue, service.CreatePendingTransactionInput{
 		Reference:   req.Reference,
 		Type:        req.Type,
 		Amount:      req.Amount,
@@ -303,8 +303,8 @@ func (a *LedgerAPI) handleTransactionByID(w http.ResponseWriter, r *http.Request
 		writeAPIError(w, r, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only GET is allowed")
 		return
 	}
-	if a.transactionQuery == nil {
-		writeAPIError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "transaction query service is not configured")
+	if a.transactionService == nil {
+		writeAPIError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "transaction service is not configured")
 		return
 	}
 
@@ -320,7 +320,7 @@ func (a *LedgerAPI) handleTransactionByID(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	transactionResult, err := a.transactionQuery.GetTransactionByID(r.Context(), tenantValue, transactionID)
+	transactionResult, err := a.transactionService.GetTransactionByID(r.Context(), tenantValue, transactionID)
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidTransactionQuery) {
 			writeAPIError(w, r, http.StatusBadRequest, "INVALID_TRANSACTION_ID", err.Error())

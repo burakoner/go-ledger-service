@@ -21,6 +21,7 @@ const (
 var (
 	ErrInvalidTransactionQuery = errors.New("invalid transaction query")
 	ErrTransactionNotFound     = errors.New("transaction not found")
+	ErrInvalidTransactionInput = errors.New("invalid transaction input")
 )
 
 type TransactionResult struct {
@@ -38,26 +39,35 @@ type TransactionResult struct {
 	ProcessedAt   *time.Time      `json:"processed_at,omitempty"`
 }
 
-type TransactionQueryService interface {
+type CreatePendingTransactionInput struct {
+	Reference   string
+	Type        string
+	Amount      int64
+	Description string
+	Metadata    json.RawMessage
+}
+
+type LedgerTransactionService interface {
 	GetTransactionByID(ctx context.Context, tenantValue tenant.ContextValue, transactionID string) (TransactionResult, error)
 	ListTransactions(ctx context.Context, tenantValue tenant.ContextValue, status string, limit, offset int) ([]TransactionResult, string, int, int, error)
+	CreatePendingTransaction(ctx context.Context, tenantValue tenant.ContextValue, input CreatePendingTransactionInput) (TransactionResult, error)
 }
 
-type transactionQueryService struct {
-	transactionReadRepo repository.LedgerRepository
+type ledgerTransactionService struct {
+	ledgerRepo repository.LedgerTransactionRepository
 }
 
-func NewTransactionQueryService(transactionReadRepo repository.LedgerRepository) TransactionQueryService {
-	return &transactionQueryService{transactionReadRepo: transactionReadRepo}
+func NewLedgerTransactionService(ledgerRepo repository.LedgerTransactionRepository) LedgerTransactionService {
+	return &ledgerTransactionService{ledgerRepo: ledgerRepo}
 }
 
-func (s *transactionQueryService) GetTransactionByID(ctx context.Context, tenantValue tenant.ContextValue, transactionID string) (TransactionResult, error) {
+func (s *ledgerTransactionService) GetTransactionByID(ctx context.Context, tenantValue tenant.ContextValue, transactionID string) (TransactionResult, error) {
 	transactionID = strings.TrimSpace(transactionID)
 	if transactionID == "" {
 		return TransactionResult{}, fmt.Errorf("%w: transaction id is required", ErrInvalidTransactionQuery)
 	}
 
-	row, err := s.transactionReadRepo.GetTransactionByID(ctx, tenantValue.TenantSchema, transactionID)
+	row, err := s.ledgerRepo.GetTransactionByID(ctx, tenantValue.TenantSchema, transactionID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return TransactionResult{}, ErrTransactionNotFound
@@ -68,13 +78,13 @@ func (s *transactionQueryService) GetTransactionByID(ctx context.Context, tenant
 	return mapTransactionRowToResult(row), nil
 }
 
-func (s *transactionQueryService) ListTransactions(ctx context.Context, tenantValue tenant.ContextValue, status string, limit, offset int) ([]TransactionResult, string, int, int, error) {
+func (s *ledgerTransactionService) ListTransactions(ctx context.Context, tenantValue tenant.ContextValue, status string, limit, offset int) ([]TransactionResult, string, int, int, error) {
 	normalizedStatus, normalizedLimit, normalizedOffset, err := normalizeTransactionListQuery(status, limit, offset)
 	if err != nil {
 		return nil, "", 0, 0, err
 	}
 
-	rows, err := s.transactionReadRepo.ListTransactions(ctx, tenantValue.TenantSchema, normalizedStatus, normalizedLimit, normalizedOffset)
+	rows, err := s.ledgerRepo.ListTransactions(ctx, tenantValue.TenantSchema, normalizedStatus, normalizedLimit, normalizedOffset)
 	if err != nil {
 		return nil, "", 0, 0, fmt.Errorf("list transactions: %w", err)
 	}
@@ -85,6 +95,21 @@ func (s *transactionQueryService) ListTransactions(ctx context.Context, tenantVa
 	}
 
 	return results, normalizedStatus, normalizedLimit, normalizedOffset, nil
+}
+
+func (s *ledgerTransactionService) CreatePendingTransaction(ctx context.Context, tenantValue tenant.ContextValue, input CreatePendingTransactionInput) (TransactionResult, error) {
+	params, err := normalizeCreatePendingTransactionInput(input)
+	if err != nil {
+		return TransactionResult{}, err
+	}
+
+	row, err := s.ledgerRepo.CreatePendingTransaction(ctx, tenantValue.TenantSchema, params)
+	if err != nil {
+		return TransactionResult{}, fmt.Errorf("create pending transaction: %w", err)
+	}
+
+	// TODO: Publish transaction-created event to RabbitMQ in next step.
+	return mapTransactionRowToResult(row), nil
 }
 
 func normalizeTransactionListQuery(status string, limit, offset int) (string, int, int, error) {
@@ -134,4 +159,40 @@ func mapTransactionRowToResult(row repository.TransactionRow) TransactionResult 
 		UpdatedAt:     row.UpdatedAt,
 		ProcessedAt:   row.ProcessedAt,
 	}
+}
+
+func normalizeCreatePendingTransactionInput(input CreatePendingTransactionInput) (repository.CreatePendingTransactionParams, error) {
+	reference := strings.TrimSpace(input.Reference)
+	if reference == "" {
+		return repository.CreatePendingTransactionParams{}, fmt.Errorf("%w: reference is required", ErrInvalidTransactionInput)
+	}
+
+	transactionType := strings.TrimSpace(strings.ToLower(input.Type))
+	switch transactionType {
+	case "credit", "debit":
+		// valid
+	default:
+		return repository.CreatePendingTransactionParams{}, fmt.Errorf("%w: type must be credit or debit", ErrInvalidTransactionInput)
+	}
+
+	if input.Amount <= 0 {
+		return repository.CreatePendingTransactionParams{}, fmt.Errorf("%w: amount must be greater than 0", ErrInvalidTransactionInput)
+	}
+
+	description := strings.TrimSpace(input.Description)
+	metadata := input.Metadata
+	if len(metadata) == 0 {
+		metadata = []byte(`{}`)
+	}
+	if !json.Valid(metadata) {
+		return repository.CreatePendingTransactionParams{}, fmt.Errorf("%w: metadata must be valid JSON", ErrInvalidTransactionInput)
+	}
+
+	return repository.CreatePendingTransactionParams{
+		Reference:   reference,
+		Type:        transactionType,
+		Amount:      input.Amount,
+		Description: description,
+		Metadata:    metadata,
+	}, nil
 }

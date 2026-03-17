@@ -35,21 +35,23 @@ func main() {
 
 	// Repositories
 	tenantRepo := repository.NewPostgresTenantRepository(postgresDB)
-	ledgerRepo := repository.NewPostgresLedgerRepository(postgresDB)
+	ledgerBalanceRepo := repository.NewPostgresLedgerBalanceRepository(postgresDB)
+	ledgerEntryRepo := repository.NewPostgresLedgerEntryRepository(postgresDB)
+	ledgerTransactionRepo := repository.NewPostgresLedgerTransactionRepository(postgresDB)
 
 	// Services
 	tenantAuthService := service.NewTenantAuthService(tenantRepo)
-	ledgerQueryService := service.NewLedgerQueryService(ledgerRepo)
-	transactionQueryService := service.NewTransactionQueryService(ledgerRepo)
-	transactionCommandService := service.NewTransactionCommandService(ledgerRepo)
+	ledgerBalanceService := service.NewLedgerBalanceService(ledgerBalanceRepo)
+	ledgerEntryService := service.NewLedgerEntryService(ledgerEntryRepo)
+	transactionService := service.NewLedgerTransactionService(ledgerTransactionRepo)
 
 	// HTTP API
 	ledgerAPI := httpapi.NewLedgerAPI(
 		postgresDB,
 		tenantAuthService,
-		ledgerQueryService,
-		transactionQueryService,
-		transactionCommandService,
+		ledgerBalanceService,
+		ledgerEntryService,
+		transactionService,
 	)
 
 	addr := ":" + cfg.Port

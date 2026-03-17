@@ -17,11 +17,6 @@ const (
 
 var ErrInvalidPagination = errors.New("invalid pagination")
 
-type BalanceResult struct {
-	AvailableBalance int64     `json:"balance"`
-	UpdatedAt        time.Time `json:"updated_at"`
-}
-
 type LedgerEntryResult struct {
 	ID              int64     `json:"id"`
 	TransactionID   string    `json:"transaction_id"`
@@ -32,32 +27,19 @@ type LedgerEntryResult struct {
 	CreatedAt       time.Time `json:"created_at"`
 }
 
-type LedgerQueryService interface {
-	GetBalance(ctx context.Context, tenantValue tenant.ContextValue) (BalanceResult, error)
+type LedgerEntryService interface {
 	ListLedgerEntries(ctx context.Context, tenantValue tenant.ContextValue, limit, offset int) ([]LedgerEntryResult, int, int, error)
 }
 
-type ledgerQueryService struct {
-	ledgerReadRepo repository.LedgerRepository
+type ledgerEntryService struct {
+	ledgerReadRepo repository.LedgerEntryRepository
 }
 
-func NewLedgerQueryService(ledgerReadRepo repository.LedgerRepository) LedgerQueryService {
-	return &ledgerQueryService{ledgerReadRepo: ledgerReadRepo}
+func NewLedgerEntryService(ledgerReadRepo repository.LedgerEntryRepository) LedgerEntryService {
+	return &ledgerEntryService{ledgerReadRepo: ledgerReadRepo}
 }
 
-func (s *ledgerQueryService) GetBalance(ctx context.Context, tenantValue tenant.ContextValue) (BalanceResult, error) {
-	row, err := s.ledgerReadRepo.GetBalance(ctx, tenantValue.TenantSchema)
-	if err != nil {
-		return BalanceResult{}, fmt.Errorf("get tenant balance: %w", err)
-	}
-
-	return BalanceResult{
-		AvailableBalance: row.AvailableBalance,
-		UpdatedAt:        row.UpdatedAt,
-	}, nil
-}
-
-func (s *ledgerQueryService) ListLedgerEntries(ctx context.Context, tenantValue tenant.ContextValue, limit, offset int) ([]LedgerEntryResult, int, int, error) {
+func (s *ledgerEntryService) ListLedgerEntries(ctx context.Context, tenantValue tenant.ContextValue, limit, offset int) ([]LedgerEntryResult, int, int, error) {
 	normalizedLimit, normalizedOffset, err := normalizeLedgerPagination(limit, offset)
 	if err != nil {
 		return nil, 0, 0, err
