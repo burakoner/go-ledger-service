@@ -12,7 +12,6 @@ import (
 
 const defaultPingTimeout = 5 * time.Second
 
-// OpenPostgres opens a PostgreSQL connection pool.
 func OpenPostgres(databaseURL string) (*sql.DB, error) {
 	if databaseURL == "" {
 		return nil, errors.New("database URL is required")
@@ -26,7 +25,6 @@ func OpenPostgres(databaseURL string) (*sql.DB, error) {
 	return conn, nil
 }
 
-// Ping checks whether PostgreSQL is reachable with a bounded timeout.
 func Ping(ctx context.Context, conn *sql.DB, timeout time.Duration) error {
 	if conn == nil {
 		return errors.New("database connection is nil")
@@ -44,4 +42,3 @@ func Ping(ctx context.Context, conn *sql.DB, timeout time.Duration) error {
 
 	return nil
 }
-

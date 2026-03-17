@@ -5,7 +5,6 @@ import (
 	"os"
 )
 
-// LedgerAPIConfig holds runtime settings for ledger-api service.
 type LedgerAPIConfig struct {
 	Port        string
 	DatabaseURL string
@@ -13,7 +12,6 @@ type LedgerAPIConfig struct {
 	RabbitMQURL string
 }
 
-// LedgerWorkerConfig holds runtime settings for ledger-worker service.
 type LedgerWorkerConfig struct {
 	DatabaseURL      string
 	RedisAddr        string
@@ -22,7 +20,6 @@ type LedgerWorkerConfig struct {
 	RabbitMQPassword string
 }
 
-// LoadLedgerAPIConfigFromEnv loads and validates ledger-api configuration from env vars.
 func LoadLedgerAPIConfigFromEnv() (LedgerAPIConfig, error) {
 	port := os.Getenv("LEDGER_API_PORT")
 	if port == "" {
@@ -42,7 +39,6 @@ func LoadLedgerAPIConfigFromEnv() (LedgerAPIConfig, error) {
 	}, nil
 }
 
-// LoadLedgerWorkerConfigFromEnv loads ledger-worker configuration from env vars.
 func LoadLedgerWorkerConfigFromEnv() LedgerWorkerConfig {
 	return LedgerWorkerConfig{
 		DatabaseURL:      os.Getenv("DATABASE_URL"),
