@@ -1,165 +1,61 @@
 # Go Ledger Service
 
-Multi-tenant ledger project in Go.
-
-Current phase:
-- containerized services
-- public schema migration
-- tenant registration API with automatic API key creation
-- dummy `ledger-worker` service
-- RabbitMQ infrastructure for inter-service messaging
-
-## 1. Prerequisites
-
-- Docker Desktop (Linux engine running)
-- Docker Compose v2+
-
-## 2. Run
-
-1. Create env file:
+## Servisi Çalıştırma
 
 ```bash
 cp .env.example .env
-```
-
-2. Start services:
-
-```bash
 docker compose up --build
 ```
 
-3. Verify API health:
+Sağlık kontrolleri:
 
 ```bash
 curl http://localhost:8080/api/v1/health
 curl http://localhost:8081/api/v1/health
 ```
 
-4. Open RabbitMQ management UI:
+## Mimari Genel Bakış
 
-```text
-http://localhost:15672
-```
+Bu proje küçük bir servis ayrımı kullanır: `ledger-api` (çalışma zamanı transaction API), `ledger-admin` (tenant onboarding API) ve `ledger-worker` (asenkron worker süreci). Altyapı servisleri PostgreSQL (ana veri kaynağı), Redis (hızlı geçici kontrol katmanı) ve RabbitMQ’dur (API ile worker arasında mesaj taşıma). Kod yapısı `handler -> service -> repository` ayrımıyla düzenlenmiştir.
 
-Default login is read from `.env`:
-- `RABBITMQ_USER`
-- `RABBITMQ_PASSWORD`
+## Schema-Per-Tenant İzolasyonu
 
-`migrations/0001_init_public.sql` is executed automatically by PostgreSQL on first initialization via `/docker-entrypoint-initdb.d`.
-If `postgres_data` volume already exists, init scripts do not run again.
+Tenant metadata verileri ortak `public` şemasında tutulur (`tenant_accounts`, `tenant_api_keys`, `tenant_configs`, `tenant_webhook_outbox`). Her tenant için `tenant_<tenantidwithoutdashes>` formatında izole bir şema oluşturulur. Tenant çözümleme API key üzerinden yapılır ve tenant’a özel işlemler yalnızca ilgili tenant şemasında çalıştırılarak tenantlar arası veri erişimi engellenir.
 
-## 3. Services
+## Redis Kullanımı (Neden ve Nerede)
 
-1. `ledger-api` (`cmd/ledger-api`, port `8080`)
-- `/`
-- `/api/v1/health`
-- future: transaction submit/query endpoints
+Redis şu amaçlarla kullanılır:
+- idempotency key kontrolü (TTL tabanlı tekrar oynatma penceresi)
+- tenant bazlı rate limiting
 
-2. `ledger-admin` (`cmd/ledger-admin`, port `8081`)
-- `/`
-- `/api/v1/health`
-- `POST /api/v1/tenants/register`
+Gerekçe: Redis düşük gecikmeli key kontrolü ve doğal süre sonu (expiration) desteği sağlar. Bu sayede idempotency ve rate limit mantığı daha basit ve hızlı uygulanır.
 
-`ledger-admin` register endpoint requires `X-Admin-Key`.
+## Tasarım Kararları ve Trade-Off'lar
 
-3. `ledger-worker` (`cmd/ledger-worker`, internal only)
-- dummy background process for now
-- prints env values for verification and exits
-- will consume RabbitMQ messages in next phase
+1. Ledger için ana veri kaynağı PostgreSQL seçildi.
+- Artı: bakiye ve ledger bütünlüğü için güçlü transaction tutarlılığı sağlar.
+- Eksi: SQL transaction ve kilitleme tasarımının daha dikkatli yapılması gerekir.
 
-4. `rabbitmq` (ports `5672`, `15672`)
-- AMQP broker for async communication between services
-- management UI enabled for local development
+2. Paylaşımlı satır yerine schema-per-tenant izolasyonu tercih edildi.
+- Artı: daha güçlü mantıksal izolasyon sınırı sağlar.
+- Eksi: dinamik şema oluşturma ve migration orkestrasyonu daha karmaşık hale gelir.
 
-5. `postgres` and `redis`
-- PostgreSQL remains source of truth for financial correctness
-- Redis remains support cache layer (rate-limit/idempotency acceleration)
+3. Asenkron işleme RabbitMQ + worker ile ayrıştırıldı.
+- Artı: API, arka plan işleme sürerken daha hızlı yanıt verir.
+- Eksi: kuyruk gözlemlenebilirliği, retry davranışı ve hata yönetimi açısından ek operasyonel yük getirir.
 
-## 4. Register Tenant
+4. Idempotency ve rate limit kontrolleri PostgreSQL dışında Redis’te tutuldu.
+- Artı: tekrar istek tespiti ve limit kontrolü daha hızlı ve basit olur.
+- Eksi: kalıcılık (durability) beklentileri için ek strateji netleştirilmelidir.
 
-```bash
-curl -X POST http://localhost:8081/api/v1/tenants/register \
-  -H "Content-Type: application/json" \
-  -H "X-Admin-Key: ${TENANT_ADMIN_KEY}" \
-  -d '{
-    "tenant_code": "acme",
-    "name": "Acme Ltd",
-    "currency": "USD",
-    "configs": {
-      "webhook_url": "http://localhost:9000/webhook",
-      "rate_limit_per_minute": 60
-    }
-  }'
-```
+## Sonraki İyileştirme Adımları
 
-Register flow:
-1. Insert tenant into `public.tenant_accounts`.
-2. Create tenant schema/tables via `migrations/0002_init_tenant_schema.sql`.
-3. Create first API key in `public.tenant_api_keys`.
-4. Save optional config values in `public.tenant_configs`.
-
-The plaintext API key is returned once.
-Supported currencies: `GBP`, `EUR`, `USD`, `TRY`.
-
-## 5. Dummy Ledger-Worker Plan
-
-Current dummy behavior:
-1. `ledger-worker` starts and prints runtime env values:
-   `DATABASE_URL`, `REDIS_ADDR`, `RABBITMQ_URL`, `RABBITMQ_USER`, `RABBITMQ_PASSWORD`.
-2. Process exits immediately after printing logs.
-3. No queue consumption yet (intentional).
-
-Next implementation steps:
-1. `ledger-api` publishes transaction events to RabbitMQ exchange.
-2. `ledger-worker` consumes queue messages and processes jobs.
-3. Worker writes results into PostgreSQL and updates outbox state.
-4. Webhook delivery + retry/backoff runs in worker flow.
-
-## 6. Messaging Plan (RabbitMQ)
-
-Initial target topology:
-1. Exchange: `ledger.events` (`topic`)
-2. Queue: `ledger.transactions.process`
-3. Queue: `ledger.webhooks.dispatch`
-4. Routing keys:
-- `transaction.created`
-- `webhook.dispatch`
-
-This remains a plan for the next coding phase; only infrastructure is active now.
-
-## 7. Migration Model
-
-- `migrations/0001_init_public.sql`
-  - auto-applied at first PostgreSQL initialization
-  - creates shared `public` tables:
-    - `tenant_accounts`
-    - `tenant_api_keys`
-    - `tenant_configs`
-    - `tenant_idempotency_keys`
-    - `tenant_transaction_jobs`
-    - `tenant_webhook_outbox`
-
-- `migrations/0002_init_tenant_schema.sql`
-  - template migration
-  - executed by `ledger-admin` during tenant register
-  - `__TENANT_SCHEMA__` placeholder is replaced by generated schema name
-
-## 8. Project Structure
-
-```text
-/cmd
-  /ledger-api
-  /ledger-admin
-  /ledger-worker
-/internal
-  /config
-  /http
-  /service
-  /repository
-  /worker
-  /tenant
-  /idempotency
-  /cache
-  /db
-/migrations
-```
+1. Admin API'nin tenant yaşam döngüsünü tam kapsaması (register, durum güncelleme, config güncelleme, listeleme/detay).
+2. Tenant oluşturma ve API key üretim/rotasyon süreçlerinin ayrılması.
+3. Kritik admin işlemlerine maker-checker tabanlı onay akışı eklenmesi.
+4. Admin API güvenliğinin IP allowlist, MFA ve kısa ömürlü yetki belirteçleriyle güçlendirilmesi.
+5. Eşzamanlılık ve tenant izolasyonuna odaklı integration test kapsamının genişletilmesi.
+6. Webhook teslimatının production seviyesinde retry/backoff, outbox izleme ve dead-letter akışıyla tamamlanması.
+7. Gözlemlenebilirlik katmanının structured log, metrik, trace ve alarm bileşenleriyle güçlendirilmesi.
+8. Migration rollout sürecinin otomasyonla güvenli hale getirilmesi (sıralı çalıştırma, doğrulama, geri dönüş planı).
+9. Ortam güvenlik kontrollerinin otomatikleştirilmesi (yanlış ortam koruması, zorunlu env/secrets doğrulaması).
