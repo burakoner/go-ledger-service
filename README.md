@@ -19,6 +19,67 @@ curl http://localhost:8088/health
 
 `Go Ledger Service.postman_collection.json` dosyası Postman'e import edilerek endpointler hızlıca test edilebilir.
 
+## Test Scriptlerini Çalıştırma (Linux / Windows WSL)
+
+### Linux
+
+```bash
+cd /path/to/go-ledger-service
+bash scripts/tests/smoke.sh
+bash scripts/tests/integration.sh
+bash scripts/tests/concurrency.sh
+```
+
+`make` ile toplu çalıştırma:
+
+```bash
+sudo apt update && sudo apt install -y make
+make test-all
+```
+
+Seed verisini zorunlu kontrol etmek için:
+
+```bash
+EXPECT_SEED_DATA=1 bash scripts/tests/smoke.sh
+```
+
+### Windows (WSL)
+
+1. Docker Desktop'ta `Use the WSL 2 based engine` açık olmalıdır.
+2. `Settings > Resources > WSL Integration` altında kullandığın distro aktif olmalıdır.
+3. WSL terminalinde proje dizinine geç:
+
+```bash
+cd /mnt/e/Github/go-ledger-service
+```
+
+4. Testleri WSL içinde çalıştır:
+
+```bash
+bash scripts/tests/smoke.sh
+bash scripts/tests/integration.sh
+bash scripts/tests/concurrency.sh
+```
+
+5. `make` ile çalıştırmak istersen:
+
+```bash
+sudo apt update && sudo apt install -y make
+make test-all
+```
+
+6. Seed verisini zorunlu kontrol etmek istersen:
+
+```bash
+EXPECT_SEED_DATA=1 bash scripts/tests/smoke.sh
+```
+
+PowerShell'den tek komutla WSL üzerinden çalıştırma:
+
+```powershell
+wsl -d Ubuntu -e bash -lc "cd /mnt/e/Github/go-ledger-service && make test-all"
+```
+
 ## Seed/Test Veri Mekanizması
 
 `docker compose up` ile PostgreSQL ilk kez ayağa kalkarken aşağıdaki migration dosyaları otomatik çalışır:
