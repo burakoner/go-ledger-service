@@ -29,9 +29,13 @@ const (
 	webhookEnabledConfigKey          = "webhook_enabled"
 	webhookURLConfigKey              = "webhook_url"
 	webhookRetryConfigKey            = "webhook_retry"
+	webhookDelaySecondsConfigKey     = "webhook_delay_seconds"
 	defaultWebhookRetry              = 3
 	minWebhookRetry                  = 1
 	maxWebhookRetry                  = 10
+	defaultWebhookDelaySeconds       = 5
+	minWebhookDelaySeconds           = 1
+	maxWebhookDelaySeconds           = 300
 )
 
 var tenantSchemaPattern = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
@@ -349,7 +353,7 @@ func validateTenantRegisterRequest(req *tenantRegisterRequest) error {
 }
 
 func normalizeTenantConfigs(input map[string]any) (map[string]any, error) {
-	configs := make(map[string]any, len(input)+3)
+	configs := make(map[string]any, len(input)+4)
 	for key, value := range input {
 		configs[key] = value
 	}
@@ -398,9 +402,27 @@ func normalizeTenantConfigs(input map[string]any) (map[string]any, error) {
 		)
 	}
 
+	webhookDelaySeconds := defaultWebhookDelaySeconds
+	if raw, ok := configs[webhookDelaySecondsConfigKey]; ok {
+		value, err := parseIntegerConfig(raw, webhookDelaySecondsConfigKey)
+		if err != nil {
+			return nil, err
+		}
+		webhookDelaySeconds = value
+	}
+	if webhookDelaySeconds < minWebhookDelaySeconds || webhookDelaySeconds > maxWebhookDelaySeconds {
+		return nil, fmt.Errorf(
+			"configs.%s must be between %d and %d",
+			webhookDelaySecondsConfigKey,
+			minWebhookDelaySeconds,
+			maxWebhookDelaySeconds,
+		)
+	}
+
 	configs[webhookEnabledConfigKey] = webhookEnabled
 	configs[webhookURLConfigKey] = webhookURL
 	configs[webhookRetryConfigKey] = webhookRetry
+	configs[webhookDelaySecondsConfigKey] = webhookDelaySeconds
 
 	return configs, nil
 }
