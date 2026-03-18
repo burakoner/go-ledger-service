@@ -103,6 +103,8 @@ docker compose up --build
 
 ## Seed Tenant Listesi
 
+Bu tablo değerleri `migrations/0003_seed_demo_data.sql` dosyasındaki başlangıç seed verisinden hesaplanmıştır.
+
 | Tenant Code | Tenant Name     | Currency | Tenant Status | API Key                                      | API Key Status | Webhook URL                                          | Transaction Rows | Ledger Entry Rows | Balance |
 | ----------- | --------------- | -------- | ------------- | -------------------------------------------- | -------------- | ---------------------------------------------------- | ---------------- | ----------------- | ------- |
 | `alpha`     | Alpha Market    | USD      | active        | `TK_SeedAlphaA1B2C3D4E5F6G7H8J9K0L1M2N3`     | active         | `http://webhook-receiver:8088/webhooks/transactions` | 20               | 16                | 24560   |
@@ -156,6 +158,8 @@ Gerekçe: Redis düşük gecikmeli key kontrolü ve doğal süre sonu (expiratio
 - Eksi: kalıcılık (durability) beklentileri için ek strateji netleştirilmelidir.
 
 ## Sonraki İyileştirme Adımları
+
+Bu çalışma bir home task kapsamında hazırlandığı için bazı konular bilinçli olarak sade tutuldu; üretim ortamında kullanılacak bir sürümde aşağıdaki geliştirmelerin uygulanması faydalı olur.
 
 - Admin API'nin tenant yaşam döngüsünü tam kapsaması (register, durum güncelleme, config güncelleme, listeleme/detay).
 - Tenant oluşturma ve API key üretim/rotasyon süreçlerinin ayrılması.
