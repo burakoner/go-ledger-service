@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS public.tenant_accounts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     code TEXT NOT NULL UNIQUE,
     name TEXT NOT NULL,
-    currency CHAR(3) NOT NULL CHECK (currency IN ('GBP', 'EUR', 'USD', 'TRY')),
+    currency CHAR(3) NOT NULL CHECK (currency IN ('GBP', 'EUR', 'USD')),
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended')),
     schema TEXT NOT NULL UNIQUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

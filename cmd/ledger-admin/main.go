@@ -338,9 +338,9 @@ func validateTenantRegisterRequest(req *tenantRegisterRequest) error {
 	}
 
 	switch req.Currency {
-	case "GBP", "EUR", "USD", "TRY":
+	case "GBP", "EUR", "USD":
 	default:
-		return errors.New("currency must be one of GBP, EUR, USD, TRY")
+		return errors.New("currency must be one of GBP, EUR, USD")
 	}
 
 	normalizedConfigs, err := normalizeTenantConfigs(req.Configs)
