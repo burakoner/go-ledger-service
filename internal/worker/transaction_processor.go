@@ -73,7 +73,17 @@ func (r *runtime) processNextPendingTransaction(ctx context.Context, tenantValue
 		return nil, fmt.Errorf("commit transaction processing: %w", err)
 	}
 
-	if err := r.dispatchTransactionWebhookNow(context.Background(), tenantValue.TenantID, pending.ID, pending.Reference, status, pending.Amount); err != nil {
+	if err := r.dispatchTransactionWebhookNow(
+		context.Background(),
+		tenantValue.TenantID,
+		pending.ID,
+		pending.Reference,
+		pending.Type,
+		status,
+		pending.Amount,
+		failureCode,
+		failureReason,
+	); err != nil {
 		log.Printf(
 			"direct webhook delivery failed tenant=%s transaction=%s reference=%s: %v",
 			tenantValue.TenantID,

@@ -25,7 +25,17 @@ type webhookConfig struct {
 	URL     string
 }
 
-func (r *runtime) dispatchTransactionWebhookNow(ctx context.Context, tenantID, transactionID, reference, status string, amount int64) error {
+func (r *runtime) dispatchTransactionWebhookNow(
+	ctx context.Context,
+	tenantID,
+	transactionID,
+	reference,
+	transactionType,
+	status string,
+	amount int64,
+	failureCode,
+	failureReason string,
+) error {
 	if r == nil || r.db == nil {
 		return errors.New("worker runtime is not initialized")
 	}
@@ -47,13 +57,32 @@ func (r *runtime) dispatchTransactionWebhookNow(ctx context.Context, tenantID, t
 		return nil
 	}
 
-	payload, err := json.Marshal(map[string]interface{}{
+	payloadMap := map[string]interface{}{
 		"transaction_id": transactionID,
 		"reference":      reference,
+		"type":           transactionType,
 		"status":         status,
 		"amount":         amount,
 		"timestamp":      time.Now().UTC(),
-	})
+	}
+
+	if strings.EqualFold(status, "failed") {
+		errorCode := strings.TrimSpace(failureCode)
+		if errorCode == "" {
+			errorCode = "TRANSACTION_FAILED"
+		}
+		errorMessage := strings.TrimSpace(failureReason)
+		if errorMessage == "" {
+			errorMessage = "transaction failed"
+		}
+
+		payloadMap["error"] = map[string]string{
+			"code":    errorCode,
+			"message": errorMessage,
+		}
+	}
+
+	payload, err := json.Marshal(payloadMap)
 	if err != nil {
 		return fmt.Errorf("marshal webhook payload: %w", err)
 	}
