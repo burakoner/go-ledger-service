@@ -11,6 +11,7 @@ import (
 	"github.com/burakoner/go-ledger-service/internal/db"
 	httpapi "github.com/burakoner/go-ledger-service/internal/http"
 	"github.com/burakoner/go-ledger-service/internal/idempotency"
+	"github.com/burakoner/go-ledger-service/internal/ratelimiting"
 	"github.com/burakoner/go-ledger-service/internal/repository"
 	"github.com/burakoner/go-ledger-service/internal/service"
 )
@@ -65,6 +66,7 @@ func main() {
 	ledgerEntryService := service.NewLedgerEntryService(ledgerEntryRepo)
 	transactionService := service.NewLedgerTransactionService(ledgerTransactionRepo)
 	idempotencyStore := idempotency.NewRedisReferenceStore(redisClient)
+	transactionRateLimiter := ratelimiting.NewRedisSlidingWindowLimiter(redisClient, cfg.RateLimitPerMin)
 
 	// HTTP API
 	ledgerAPI := httpapi.NewLedgerAPI(
@@ -75,6 +77,7 @@ func main() {
 		transactionService,
 		idempotencyStore,
 		cfg.IdempotencyTTL,
+		transactionRateLimiter,
 	)
 
 	addr := ":" + cfg.Port

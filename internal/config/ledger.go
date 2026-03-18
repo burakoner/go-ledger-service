@@ -9,13 +9,14 @@ import (
 )
 
 type LedgerAPIConfig struct {
-	Port           string
-	DatabaseURL    string
-	RedisAddr      string
-	IdempotencyTTL time.Duration
-	DBMaxOpenConns int
-	DBMaxIdleConns int
-	DBConnMaxLife  time.Duration
+	Port            string
+	DatabaseURL     string
+	RedisAddr       string
+	IdempotencyTTL  time.Duration
+	RateLimitPerMin int
+	DBMaxOpenConns  int
+	DBMaxIdleConns  int
+	DBConnMaxLife   time.Duration
 }
 
 type LedgerWorkerConfig struct {
@@ -28,7 +29,10 @@ type LedgerWorkerConfig struct {
 }
 
 func LoadLedgerAPIConfigFromEnv() (LedgerAPIConfig, error) {
-	const defaultIdempotencyTTL = 24 * time.Hour
+	const (
+		defaultIdempotencyTTL  = 24 * time.Hour
+		defaultRateLimitPerMin = 5
+	)
 
 	port := os.Getenv("LEDGER_API_PORT")
 	if port == "" {
@@ -53,19 +57,33 @@ func LoadLedgerAPIConfigFromEnv() (LedgerAPIConfig, error) {
 		idempotencyTTL = time.Duration(parsedSeconds) * time.Second
 	}
 
+	rateLimitPerMin := defaultRateLimitPerMin
+	rawRateLimitPerMin := strings.TrimSpace(os.Getenv("RATE_LIMIT_PER_MINUTE"))
+	if rawRateLimitPerMin != "" {
+		parsed, err := strconv.Atoi(rawRateLimitPerMin)
+		if err != nil {
+			return LedgerAPIConfig{}, errors.New("RATE_LIMIT_PER_MINUTE must be a valid integer")
+		}
+		if parsed <= 0 {
+			return LedgerAPIConfig{}, errors.New("RATE_LIMIT_PER_MINUTE must be greater than 0")
+		}
+		rateLimitPerMin = parsed
+	}
+
 	maxOpenConns, maxIdleConns, connMaxLife, err := loadDBPoolSettingsFromEnv()
 	if err != nil {
 		return LedgerAPIConfig{}, err
 	}
 
 	return LedgerAPIConfig{
-		Port:           port,
-		DatabaseURL:    databaseURL,
-		RedisAddr:      os.Getenv("REDIS_ADDR"),
-		IdempotencyTTL: idempotencyTTL,
-		DBMaxOpenConns: maxOpenConns,
-		DBMaxIdleConns: maxIdleConns,
-		DBConnMaxLife:  connMaxLife,
+		Port:            port,
+		DatabaseURL:     databaseURL,
+		RedisAddr:       os.Getenv("REDIS_ADDR"),
+		IdempotencyTTL:  idempotencyTTL,
+		RateLimitPerMin: rateLimitPerMin,
+		DBMaxOpenConns:  maxOpenConns,
+		DBMaxIdleConns:  maxIdleConns,
+		DBConnMaxLife:   connMaxLife,
 	}, nil
 }
 

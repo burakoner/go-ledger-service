@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/burakoner/go-ledger-service/internal/idempotency"
+	"github.com/burakoner/go-ledger-service/internal/ratelimiting"
 	"github.com/burakoner/go-ledger-service/internal/service"
 	"github.com/burakoner/go-ledger-service/internal/tenant"
 )
@@ -22,7 +23,6 @@ const (
 	defaultTransactionIdempotency = 24 * time.Hour
 	idempotencyReplayWait         = 1500 * time.Millisecond
 	idempotencyReplayPoll         = 50 * time.Millisecond
-	balanceDecimalDigits          = 2
 )
 
 type LedgerAPI struct {
@@ -33,6 +33,7 @@ type LedgerAPI struct {
 	transactionService service.LedgerTransactionService
 	idempotencyStore   idempotency.ReferenceStore
 	idempotencyTTL     time.Duration
+	rateLimiter        ratelimiting.TransactionSubmissionLimiter
 }
 
 func NewLedgerAPI(
@@ -43,6 +44,7 @@ func NewLedgerAPI(
 	transactionService service.LedgerTransactionService,
 	idempotencyStore idempotency.ReferenceStore,
 	idempotencyTTL time.Duration,
+	rateLimiter ratelimiting.TransactionSubmissionLimiter,
 ) *LedgerAPI {
 	if idempotencyTTL <= 0 {
 		idempotencyTTL = defaultTransactionIdempotency
@@ -56,6 +58,7 @@ func NewLedgerAPI(
 		transactionService: transactionService,
 		idempotencyStore:   idempotencyStore,
 		idempotencyTTL:     idempotencyTTL,
+		rateLimiter:        rateLimiter,
 	}
 }
 
@@ -288,6 +291,25 @@ func (a *LedgerAPI) handleTransactionPlace(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		writeAPIError(w, r, http.StatusInternalServerError, "TENANT_CONTEXT_MISSING", "tenant context is missing")
 		return
+	}
+
+	if a.rateLimiter != nil {
+		decision, err := a.rateLimiter.AllowTransactionSubmission(
+			r.Context(),
+			tenantValue.TenantID,
+			requestIDFromContext(r.Context()),
+		)
+		if err != nil {
+			log.Printf("rate limit check failed: %v", err)
+			writeAPIError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to apply rate limit")
+			return
+		}
+
+		if !decision.Allowed {
+			w.Header().Set("Retry-After", strconv.FormatInt(retryAfterSeconds(decision.RetryAfter), 10))
+			writeAPIError(w, r, http.StatusTooManyRequests, "RATE_LIMIT_EXCEEDED", "rate limit exceeded for transaction submission")
+			return
+		}
 	}
 
 	req, err := decodeCreateTransactionRequest(r)
@@ -642,6 +664,22 @@ func parseOptionalIntQueryParam(r *http.Request, name string) (int, error) {
 		return 0, errors.New(name + " must be a valid integer")
 	}
 	return value, nil
+}
+
+func retryAfterSeconds(duration time.Duration) int64 {
+	if duration <= 0 {
+		return 1
+	}
+
+	seconds := int64(duration / time.Second)
+	if duration%time.Second != 0 {
+		seconds++
+	}
+	if seconds < 1 {
+		seconds = 1
+	}
+
+	return seconds
 }
 
 func parseTransactionIDFromPath(path string) (string, error) {
