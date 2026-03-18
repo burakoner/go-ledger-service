@@ -383,11 +383,11 @@ func (a *LedgerAPI) handleTransactionPlace(w http.ResponseWriter, r *http.Reques
 		log.Printf("idempotency mark completed failed: %v", markErr)
 	}
 
+	w.Header().Set("Idempotency-Replayed", "false")
 	writeJSON(w, http.StatusAccepted, map[string]interface{}{
-		"tenant_id":            tenantValue.TenantID,
-		"transaction":          result,
-		"idempotency_replayed": false,
-		"queue_status":         "pending",
+		"tenant_id":    tenantValue.TenantID,
+		"transaction":  result,
+		"queue_status": "pending",
 	})
 }
 
@@ -436,11 +436,11 @@ func (a *LedgerAPI) handleTransactionByID(w http.ResponseWriter, r *http.Request
 }
 
 func writeTransactionReplayResponse(w http.ResponseWriter, tenantID string, transaction service.TransactionResult) {
+	w.Header().Set("Idempotency-Replayed", "true")
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"tenant_id":            tenantID,
-		"transaction":          transaction,
-		"idempotency_replayed": true,
-		"queue_status":         "PENDING_DB_QUEUE",
+		"tenant_id":    tenantID,
+		"transaction":  transaction,
+		"queue_status": "pending",
 	})
 }
 
