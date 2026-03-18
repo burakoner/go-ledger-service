@@ -103,8 +103,8 @@ services:
     image: postgres:18.3-alpine
     container_name: go-ledger-postgres
     restart: unless-stopped
-    ports:
-      - "5432:5432"
+    # ports:
+    #   - "5432:5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-ledger}
       POSTGRES_USER: ${POSTGRES_USER:-ledger}
@@ -120,9 +120,7 @@ services:
       retries: 10
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Run public migration automatically on first DB initialization.
       - ./migrations/0001_init_public.sql:/docker-entrypoint-initdb.d/0001_init_public.sql:ro
-      # Seed demo tenants and tenant-local transactions on first DB initialization.
       - ./migrations/0003_seed_demo_data.sql:/docker-entrypoint-initdb.d/0003_seed_demo_data.sql:ro
     networks:
       - ledger-net
@@ -132,8 +130,8 @@ services:
     container_name: go-ledger-redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
-    ports:
-      - "6379:6379"
+    # ports:
+    #   - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
