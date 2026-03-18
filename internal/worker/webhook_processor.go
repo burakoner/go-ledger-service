@@ -8,32 +8,22 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 )
 
 const (
-	webhookConfigLoadTimeout     = 5 * time.Second
-	webhookRequestTimeout        = 5 * time.Second
-	webhookEnabledConfigKey      = "webhook_enabled"
-	webhookURLConfigKey          = "webhook_url"
-	webhookRetryConfigKey        = "webhook_retry"
-	webhookDelaySecondsConfigKey = "webhook_delay_seconds"
-	webhookDefaultRetry          = 3
-	webhookMinRetry              = 1
-	webhookMaxRetry              = 10
-	webhookDefaultDelaySeconds   = 5
-	webhookMinDelaySeconds       = 1
-	webhookMaxDelaySeconds       = 300
-	webhookHTTPStatusFailStart   = 400
+	webhookConfigLoadTimeout   = 5 * time.Second
+	webhookRequestTimeout      = 5 * time.Second
+	webhookEnabledConfigKey    = "webhook_enabled"
+	webhookURLConfigKey        = "webhook_url"
+	webhookHTTPStatusFailStart = 400
+	defaultWebhookMaxRetry     = 5
 )
 
 type webhookConfig struct {
-	Enabled      bool
-	URL          string
-	Retry        int
-	DelaySeconds int
+	Enabled bool
+	URL     string
 }
 
 func (r *runtime) dispatchTransactionWebhookNow(
@@ -78,10 +68,14 @@ func (r *runtime) dispatchTransactionWebhookNow(
 		return fmt.Errorf("marshal webhook payload: %w", err)
 	}
 
-	delayBetweenRetries := time.Duration(cfg.DelaySeconds) * time.Second
+	maxRetry := r.webhookMaxRetry
+	if maxRetry <= 0 {
+		maxRetry = defaultWebhookMaxRetry
+	}
+
 	var lastErr error
 
-	for attempt := 1; attempt <= cfg.Retry; attempt++ {
+	for attempt := 1; attempt <= maxRetry; attempt++ {
 		sendCtx, sendCancel := context.WithTimeout(ctx, webhookRequestTimeout)
 		err := sendWebhook(sendCtx, r.httpClient, cfg.URL, payload)
 		sendCancel()
@@ -90,16 +84,16 @@ func (r *runtime) dispatchTransactionWebhookNow(
 		}
 
 		lastErr = err
-		if attempt == cfg.Retry {
+		if attempt == maxRetry {
 			break
 		}
 
-		if waitErr := waitWithContext(ctx, delayBetweenRetries); waitErr != nil {
+		if waitErr := waitWithContext(ctx, fibonacciRetryBackoff(attempt)); waitErr != nil {
 			return fmt.Errorf("wait before webhook retry: %w", waitErr)
 		}
 	}
 
-	return fmt.Errorf("send webhook failed after %d attempts: %w", cfg.Retry, lastErr)
+	return fmt.Errorf("send webhook failed after %d attempts: %w", maxRetry, lastErr)
 }
 
 func (r *runtime) loadWebhookConfigForDelivery(ctx context.Context, tenantID string) (webhookConfig, error) {
@@ -107,14 +101,12 @@ func (r *runtime) loadWebhookConfigForDelivery(ctx context.Context, tenantID str
 		SELECT key, value
 		FROM public.tenant_configs
 		WHERE tenant_id = $1::uuid
-		  AND key IN ($2, $3, $4, $5)
+		  AND key IN ($2, $3)
 	`
 
 	cfg := webhookConfig{
-		Enabled:      false,
-		URL:          "",
-		Retry:        webhookDefaultRetry,
-		DelaySeconds: webhookDefaultDelaySeconds,
+		Enabled: false,
+		URL:     "",
 	}
 
 	rows, err := r.db.QueryContext(
@@ -123,8 +115,6 @@ func (r *runtime) loadWebhookConfigForDelivery(ctx context.Context, tenantID str
 		tenantID,
 		webhookEnabledConfigKey,
 		webhookURLConfigKey,
-		webhookRetryConfigKey,
-		webhookDelaySecondsConfigKey,
 	)
 	if err != nil {
 		return webhookConfig{}, fmt.Errorf("query webhook configs for tenant %s: %w", tenantID, err)
@@ -161,72 +151,13 @@ func (r *runtime) loadWebhookConfigForDelivery(ctx context.Context, tenantID str
 				return webhookConfig{}, fmt.Errorf("parse webhook_url config: %w", err)
 			}
 			cfg.URL = strings.TrimSpace(value)
-		case webhookRetryConfigKey:
-			if len(raw) == 0 || string(raw) == "null" {
-				cfg.Retry = webhookDefaultRetry
-				continue
-			}
-			parsedRetry, err := parseWebhookIntegerConfig(raw, webhookRetryConfigKey)
-			if err != nil {
-				return webhookConfig{}, err
-			}
-			cfg.Retry = parsedRetry
-		case webhookDelaySecondsConfigKey:
-			if len(raw) == 0 || string(raw) == "null" {
-				cfg.DelaySeconds = webhookDefaultDelaySeconds
-				continue
-			}
-			parsedDelay, err := parseWebhookIntegerConfig(raw, webhookDelaySecondsConfigKey)
-			if err != nil {
-				return webhookConfig{}, err
-			}
-			cfg.DelaySeconds = parsedDelay
 		}
 	}
 	if err := rows.Err(); err != nil {
 		return webhookConfig{}, fmt.Errorf("iterate webhook config rows: %w", err)
 	}
 
-	if cfg.Retry < webhookMinRetry {
-		cfg.Retry = webhookMinRetry
-	}
-	if cfg.Retry > webhookMaxRetry {
-		cfg.Retry = webhookMaxRetry
-	}
-	if cfg.DelaySeconds < webhookMinDelaySeconds {
-		cfg.DelaySeconds = webhookMinDelaySeconds
-	}
-	if cfg.DelaySeconds > webhookMaxDelaySeconds {
-		cfg.DelaySeconds = webhookMaxDelaySeconds
-	}
-
 	return cfg, nil
-}
-
-func parseWebhookIntegerConfig(raw []byte, key string) (int, error) {
-	var asInt int
-	if err := json.Unmarshal(raw, &asInt); err == nil {
-		return asInt, nil
-	}
-
-	var asFloat float64
-	if err := json.Unmarshal(raw, &asFloat); err == nil {
-		if asFloat != float64(int(asFloat)) {
-			return 0, fmt.Errorf("%s config must be integer", key)
-		}
-		return int(asFloat), nil
-	}
-
-	var asString string
-	if err := json.Unmarshal(raw, &asString); err == nil {
-		parsed, parseErr := strconv.Atoi(strings.TrimSpace(asString))
-		if parseErr != nil {
-			return 0, fmt.Errorf("%s config must be integer", key)
-		}
-		return parsed, nil
-	}
-
-	return 0, fmt.Errorf("%s config must be integer", key)
 }
 
 func sendWebhook(ctx context.Context, client *http.Client, endpoint string, payload []byte) error {
@@ -251,6 +182,26 @@ func sendWebhook(ctx context.Context, client *http.Client, endpoint string, payl
 	}
 
 	return nil
+}
+
+func fibonacciRetryBackoff(attempt int) time.Duration {
+	const maxDurationSeconds = int64(^uint64(0)>>1) / int64(time.Second)
+
+	if attempt <= 1 {
+		return time.Second
+	}
+
+	prev := int64(1)
+	curr := int64(1)
+	for i := 2; i <= attempt; i++ {
+		if curr > maxDurationSeconds-prev {
+			return time.Duration(maxDurationSeconds) * time.Second
+		}
+
+		prev, curr = curr, prev+curr
+	}
+
+	return time.Duration(curr) * time.Second
 }
 
 func waitWithContext(ctx context.Context, duration time.Duration) error {

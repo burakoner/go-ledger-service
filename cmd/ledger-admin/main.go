@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"math"
 	"math/big"
 	"net/http"
 	"net/url"
@@ -28,14 +27,6 @@ const (
 	apiKeyAlphabet                   = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	webhookEnabledConfigKey          = "webhook_enabled"
 	webhookURLConfigKey              = "webhook_url"
-	webhookRetryConfigKey            = "webhook_retry"
-	webhookDelaySecondsConfigKey     = "webhook_delay_seconds"
-	defaultWebhookRetry              = 3
-	minWebhookRetry                  = 1
-	maxWebhookRetry                  = 10
-	defaultWebhookDelaySeconds       = 5
-	minWebhookDelaySeconds           = 1
-	maxWebhookDelaySeconds           = 300
 )
 
 var tenantSchemaPattern = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
@@ -353,7 +344,7 @@ func validateTenantRegisterRequest(req *tenantRegisterRequest) error {
 }
 
 func normalizeTenantConfigs(input map[string]any) (map[string]any, error) {
-	configs := make(map[string]any, len(input)+4)
+	configs := make(map[string]any, len(input)+2)
 	for key, value := range input {
 		configs[key] = value
 	}
@@ -385,44 +376,8 @@ func normalizeTenantConfigs(input map[string]any) (map[string]any, error) {
 		}
 	}
 
-	webhookRetry := defaultWebhookRetry
-	if raw, ok := configs[webhookRetryConfigKey]; ok {
-		value, err := parseIntegerConfig(raw, webhookRetryConfigKey)
-		if err != nil {
-			return nil, err
-		}
-		webhookRetry = value
-	}
-	if webhookRetry < minWebhookRetry || webhookRetry > maxWebhookRetry {
-		return nil, fmt.Errorf(
-			"configs.%s must be between %d and %d",
-			webhookRetryConfigKey,
-			minWebhookRetry,
-			maxWebhookRetry,
-		)
-	}
-
-	webhookDelaySeconds := defaultWebhookDelaySeconds
-	if raw, ok := configs[webhookDelaySecondsConfigKey]; ok {
-		value, err := parseIntegerConfig(raw, webhookDelaySecondsConfigKey)
-		if err != nil {
-			return nil, err
-		}
-		webhookDelaySeconds = value
-	}
-	if webhookDelaySeconds < minWebhookDelaySeconds || webhookDelaySeconds > maxWebhookDelaySeconds {
-		return nil, fmt.Errorf(
-			"configs.%s must be between %d and %d",
-			webhookDelaySecondsConfigKey,
-			minWebhookDelaySeconds,
-			maxWebhookDelaySeconds,
-		)
-	}
-
 	configs[webhookEnabledConfigKey] = webhookEnabled
 	configs[webhookURLConfigKey] = webhookURL
-	configs[webhookRetryConfigKey] = webhookRetry
-	configs[webhookDelaySecondsConfigKey] = webhookDelaySeconds
 
 	return configs, nil
 }
@@ -444,24 +399,6 @@ func parseStringConfig(raw any, fieldName string) (string, error) {
 		return "", fmt.Errorf("configs.%s must be a string", fieldName)
 	}
 	return value, nil
-}
-
-func parseIntegerConfig(raw any, fieldName string) (int, error) {
-	switch value := raw.(type) {
-	case int:
-		return value, nil
-	case int32:
-		return int(value), nil
-	case int64:
-		return int(value), nil
-	case float64:
-		if math.Trunc(value) != value {
-			return 0, fmt.Errorf("configs.%s must be an integer", fieldName)
-		}
-		return int(value), nil
-	default:
-		return 0, fmt.Errorf("configs.%s must be an integer", fieldName)
-	}
 }
 
 func validateWebhookURL(raw string) error {

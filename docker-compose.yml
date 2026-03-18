@@ -65,6 +65,7 @@ services:
     environment:
       DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
       WORKER_COUNT: "${WORKER_COUNT:-2}"
+      WEBHOOK_MAX_RETRY: "${WEBHOOK_MAX_RETRY:-5}"
     depends_on:
       postgres:
         condition: service_healthy

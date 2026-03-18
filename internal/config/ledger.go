@@ -16,8 +16,9 @@ type LedgerAPIConfig struct {
 }
 
 type LedgerWorkerConfig struct {
-	DatabaseURL string
-	WorkerCount int
+	DatabaseURL     string
+	WorkerCount     int
+	WebhookMaxRetry int
 }
 
 func LoadLedgerAPIConfigFromEnv() (LedgerAPIConfig, error) {
@@ -55,6 +56,8 @@ func LoadLedgerAPIConfigFromEnv() (LedgerAPIConfig, error) {
 }
 
 func LoadLedgerWorkerConfigFromEnv() (LedgerWorkerConfig, error) {
+	const defaultWebhookMaxRetry = 5
+
 	databaseURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	if databaseURL == "" {
 		return LedgerWorkerConfig{}, errors.New("DATABASE_URL is required")
@@ -73,8 +76,22 @@ func LoadLedgerWorkerConfigFromEnv() (LedgerWorkerConfig, error) {
 		workerCount = parsed
 	}
 
+	webhookMaxRetry := defaultWebhookMaxRetry
+	rawWebhookMaxRetry := strings.TrimSpace(os.Getenv("WEBHOOK_MAX_RETRY"))
+	if rawWebhookMaxRetry != "" {
+		parsed, err := strconv.Atoi(rawWebhookMaxRetry)
+		if err != nil {
+			return LedgerWorkerConfig{}, errors.New("WEBHOOK_MAX_RETRY must be a valid integer")
+		}
+		if parsed <= 0 {
+			return LedgerWorkerConfig{}, errors.New("WEBHOOK_MAX_RETRY must be greater than 0")
+		}
+		webhookMaxRetry = parsed
+	}
+
 	return LedgerWorkerConfig{
-		DatabaseURL: databaseURL,
-		WorkerCount: workerCount,
+		DatabaseURL:     databaseURL,
+		WorkerCount:     workerCount,
+		WebhookMaxRetry: webhookMaxRetry,
 	}, nil
 }

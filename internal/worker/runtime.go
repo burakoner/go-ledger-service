@@ -28,9 +28,10 @@ type activeTenant struct {
 }
 
 type runtime struct {
-	db          *sql.DB
-	workerCount int
-	httpClient  *http.Client
+	db              *sql.DB
+	workerCount     int
+	webhookMaxRetry int
+	httpClient      *http.Client
 
 	mu      sync.RWMutex
 	tenants []activeTenant
@@ -39,6 +40,9 @@ type runtime struct {
 func Run(ctx context.Context, cfg config.LedgerWorkerConfig) error {
 	if cfg.WorkerCount <= 0 {
 		return errors.New("worker count must be greater than 0")
+	}
+	if cfg.WebhookMaxRetry <= 0 {
+		return errors.New("webhook max retry must be greater than 0")
 	}
 
 	postgresDB, err := db.OpenPostgres(cfg.DatabaseURL)
@@ -56,8 +60,9 @@ func Run(ctx context.Context, cfg config.LedgerWorkerConfig) error {
 	}
 
 	r := &runtime{
-		db:          postgresDB,
-		workerCount: cfg.WorkerCount,
+		db:              postgresDB,
+		workerCount:     cfg.WorkerCount,
+		webhookMaxRetry: cfg.WebhookMaxRetry,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
