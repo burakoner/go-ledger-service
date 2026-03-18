@@ -54,6 +54,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Prepare env file
+        run: cp .env.example .env
+
       - name: Show Docker versions
         run: |
           docker --version
