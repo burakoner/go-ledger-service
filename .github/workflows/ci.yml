@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  go-checks:
+    name: Go Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Check formatting
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt-formatted:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Verify module files
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: Build
+        run: go build ./...
+
+      - name: Run unit tests
+        run: go test ./...
+
+  compose-e2e:
+    name: Docker Compose E2E
+    runs-on: ubuntu-latest
+    needs: go-checks
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Show Docker versions
+        run: |
+          docker --version
+          docker compose version
+
+      - name: Smoke test
+        env:
+          EXPECT_SEED_DATA: "1"
+        run: bash scripts/tests/smoke.sh
+
+      - name: Integration test
+        run: bash scripts/tests/integration.sh
+
+      - name: Concurrency test
+        run: bash scripts/tests/concurrency.sh
+
+      - name: Overdraw concurrency test
+        run: bash scripts/tests/concurrency_overdraw.sh
+
+      - name: Capture compose logs
+        if: failure()
+        run: docker compose logs --no-color > compose-logs.txt
+
+      - name: Upload compose logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compose-logs
+          path: compose-logs.txt
+
+      - name: Tear down compose stack
+        if: always()
+        run: docker compose down -v --remove-orphans
