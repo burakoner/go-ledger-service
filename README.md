@@ -139,25 +139,21 @@ Gerekçe: Redis düşük gecikmeli key kontrolü ve doğal süre sonu (expiratio
 
 ## Tasarım Kararları ve Trade-Off'lar
 
-1. Ledger için ana veri kaynağı PostgreSQL seçildi.
+- Ledger için ana veri kaynağı PostgreSQL seçildi.
+  - Artı: bakiye ve ledger bütünlüğü için güçlü transaction tutarlılığı sağlar.
+  - Eksi: SQL transaction ve kilitleme tasarımının daha dikkatli yapılması gerekir.
 
-- Artı: bakiye ve ledger bütünlüğü için güçlü transaction tutarlılığı sağlar.
-- Eksi: SQL transaction ve kilitleme tasarımının daha dikkatli yapılması gerekir.
+- Paylaşımlı satır yerine schema-per-tenant izolasyonu tercih edildi.
+  - Artı: daha güçlü mantıksal izolasyon sınırı sağlar.
+  - Eksi: dinamik şema oluşturma ve migration orkestrasyonu daha karmaşık hale gelir.
 
-2. Paylaşımlı satır yerine schema-per-tenant izolasyonu tercih edildi.
+- Asenkron işleme PostgreSQL `pending` queue + worker ile ayrıştırıldı.
+  - Artı: ek broker bağımlılığı olmadan API ve worker ayrımı korunur.
+  - Eksi: yüksek tenant sayısında worker tarama stratejisi dikkatli tasarlanmalıdır.
 
-- Artı: daha güçlü mantıksal izolasyon sınırı sağlar.
-- Eksi: dinamik şema oluşturma ve migration orkestrasyonu daha karmaşık hale gelir.
-
-3. Asenkron işleme PostgreSQL `pending` queue + worker ile ayrıştırıldı.
-
-- Artı: ek broker bağımlılığı olmadan API ve worker ayrımı korunur.
-- Eksi: yüksek tenant sayısında worker tarama stratejisi dikkatli tasarlanmalıdır.
-
-4. Idempotency ve rate limiting kontrolleri PostgreSQL dışında Redis’te tutuldu.
-
-- Artı: tekrar istek tespiti ve tenant bazlı limit kontrolü düşük gecikmeyle yapılır.
-- Eksi: kalıcılık (durability) beklentileri için ek strateji netleştirilmelidir.
+- Idempotency ve rate limiting kontrolleri PostgreSQL dışında Redis’te tutuldu.
+  - Artı: tekrar istek tespiti ve tenant bazlı limit kontrolü düşük gecikmeyle yapılır.
+  - Eksi: kalıcılık (durability) beklentileri için ek strateji netleştirilmelidir.
 
 ## Sonraki İyileştirme Adımları
 
