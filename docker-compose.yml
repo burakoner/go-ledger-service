@@ -12,7 +12,7 @@ services:
     environment:
       LEDGER_API_PORT: ${LEDGER_API_PORT:-8080}
       REDIS_ADDR: "redis:6379"
-      DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
+      DATABASE_URL: "postgres://${POSTGRES_USER:-ledger}:${POSTGRES_PASSWORD:-StrongPa55word123!}@postgres:5432/${POSTGRES_DB:-ledger}?sslmode=disable"
       RATE_LIMIT_PER_MINUTE: "${RATE_LIMIT_PER_MINUTE:-5}"
       IDEMPOTENCY_TTL_SECONDS: "${IDEMPOTENCY_TTL_SECONDS:-86400}"
       POSTGRES_MAX_OPEN_CONNS: "${POSTGRES_MAX_OPEN_CONNS:-25}"
@@ -44,7 +44,7 @@ services:
       - ${LEDGER_ADMIN_PORT:-8090}:${LEDGER_ADMIN_PORT:-8090}
     environment:
       LEDGER_ADMIN_PORT: ${LEDGER_ADMIN_PORT:-8090}
-      DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
+      DATABASE_URL: "postgres://${POSTGRES_USER:-ledger}:${POSTGRES_PASSWORD:-StrongPa55word123!}@postgres:5432/${POSTGRES_DB:-ledger}?sslmode=disable"
       TENANT_ADMIN_KEY: ${TENANT_ADMIN_KEY:-WX5TczRsQnCk7k8k9AXbsW5czRsQnCkg}
       TENANT_SCHEMA_MIGRATION_PATH: "migrations/0002_init_tenant_schema.sql"
     depends_on:
@@ -67,7 +67,7 @@ services:
         APP_PATH: ./cmd/ledger-worker
     container_name: go-ledger-worker
     environment:
-      DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
+      DATABASE_URL: "postgres://${POSTGRES_USER:-ledger}:${POSTGRES_PASSWORD:-StrongPa55word123!}@postgres:5432/${POSTGRES_DB:-ledger}?sslmode=disable"
       WORKER_COUNT: "${WORKER_COUNT:-2}"
       WEBHOOK_MAX_RETRY: "${WEBHOOK_MAX_RETRY:-5}"
       POSTGRES_MAX_OPEN_CONNS: "${POSTGRES_MAX_OPEN_CONNS:-25}"
@@ -115,7 +115,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-ledger}
       POSTGRES_USER: ${POSTGRES_USER:-ledger}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ledger}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-StrongPa55word123!}
     healthcheck:
       test:
         [
