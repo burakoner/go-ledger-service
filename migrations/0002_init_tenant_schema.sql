@@ -19,6 +19,10 @@ CREATE TABLE IF NOT EXISTS __TENANT_SCHEMA__.transactions (
     processed_at TIMESTAMPTZ NULL
 );
 
+CREATE INDEX IF NOT EXISTS idx_transactions_pending_created_at
+    ON __TENANT_SCHEMA__.transactions (created_at ASC, id ASC)
+    WHERE status = 'pending';
+
 CREATE INDEX IF NOT EXISTS idx_transactions_reference_created_at
     ON __TENANT_SCHEMA__.transactions (reference, created_at DESC, id DESC);
 
