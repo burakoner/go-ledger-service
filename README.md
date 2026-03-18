@@ -28,6 +28,7 @@ cd /path/to/go-ledger-service
 bash scripts/tests/smoke.sh
 bash scripts/tests/integration.sh
 bash scripts/tests/concurrency.sh
+bash scripts/tests/concurrency_overdraw.sh
 ```
 
 `make` ile toplu çalıştırma:
@@ -59,6 +60,7 @@ cd /mnt/e/Github/go-ledger-service
 bash scripts/tests/smoke.sh
 bash scripts/tests/integration.sh
 bash scripts/tests/concurrency.sh
+bash scripts/tests/concurrency_overdraw.sh
 ```
 
 5. `make` ile çalıştırmak istersen:
