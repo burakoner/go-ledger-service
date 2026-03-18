@@ -163,20 +163,21 @@ Gerekçe: Redis düşük gecikmeli key kontrolü ve doğal süre sonu (expiratio
 
 Bu çalışma bir home task kapsamında hazırlandığı için bazı konular bilinçli olarak sade tutuldu; üretim ortamında kullanılacak bir sürümde aşağıdaki geliştirmelerin uygulanması faydalı olur.
 
-- Admin API'nin tenant yaşam döngüsünü tam kapsaması (register, durum güncelleme, config güncelleme, listeleme/detay).
-- Tenant oluşturma ve API key üretim/rotasyon süreçlerinin ayrılması.
-- Kritik admin işlemlerine maker-checker tabanlı onay akışı eklenmesi.
+- İstek başlıklarına `timestamp` ve `receive window` alanlarının eklenmesi; sunucuda zaman kayması toleransına göre süresi geçmiş veya replay riski taşıyan isteklerin reddedilmesi.
+- Transaction `POST` çağrıları için imza doğrulama (örn. HMAC) katmanının eklenmesi; imza hesaplamasında `http method`, `path`, `request body` ve `timestamp` bilgisinin zorunlu tutulması.
 - Admin API güvenliğinin IP allowlist, MFA ve kısa ömürlü yetki belirteçleriyle güçlendirilmesi.
-- Eşzamanlılık ve tenant izolasyonuna odaklı integration test kapsamının genişletilmesi.
+- Kritik admin işlemlerine maker-checker tabanlı onay akışı eklenmesi.
+- Tenant oluşturma ve API key üretim/rotasyon süreçlerinin ayrılması.
+- Admin API'nin tenant yaşam döngüsünü tam kapsaması (register, durum güncelleme, config güncelleme, listeleme/detay).
+- Tenant durumu değişirken in-flight transaction yarışlarının (race) işlem öncesi son durum kontrolü ve test senaryolarıyla güvence altına alınması.
+- Ledger kayıtlarının değişmezliğini teknik olarak garanti altına almak için append-only modelin kriptografik zincirleme (hash-chain / blockchain benzeri) yaklaşımla güçlendirilmesi.
 - Webhook teslimatının queue/outbox tabanlı retry/backoff ve dead-letter akışıyla daha dayanıklı hale getirilmesi.
+- Servis logları ve audit logları için uçtan uca bir loglama kurgusunun kurulması, audit kayıtlarının append-only/değiştirilemez yapıda tutulması ve merkezi toplama ile saklama/erişim politikalarının tanımlanması.
 - Gözlemlenebilirlik katmanının structured log, metrik, trace ve alarm bileşenleriyle güçlendirilmesi.
+- Rate limiting katmanının uygulama içinden edge proxy seviyesine taşınması (örn. Nginx/Envoy/HAProxy), böylece uygulama üzerindeki yükün azaltılması ve tek noktadan güvenlik, yönlendirme, TLS, IP kısıtlama ve trafik politikalarının yönetilmesi.
 - Migration rollout sürecinin otomasyonla güvenli hale getirilmesi (sıralı çalıştırma, doğrulama, geri dönüş planı).
 - Ortam güvenlik kontrollerinin otomatikleştirilmesi (yanlış ortam koruması, zorunlu env/secrets doğrulaması).
-- Servis logları ve audit logları için uçtan uca bir loglama kurgusunun kurulması, audit kayıtlarının append-only/değiştirilemez yapıda tutulması ve merkezi toplama ile saklama/erişim politikalarının tanımlanması.
-- Tenant durumu değişirken in-flight transaction yarışlarının (race) işlem öncesi son durum kontrolü ve test senaryolarıyla güvence altına alınması.
-- Rate limiting katmanının uygulama içinden edge proxy seviyesine taşınması (örn. Nginx/Envoy/HAProxy), böylece uygulama üzerindeki yükün azaltılması ve tek noktadan güvenlik, yönlendirme, TLS, IP kısıtlama ve trafik politikalarının yönetilmesi.
-- İstek başlıklarına `timestamp` ve `receive window` alanlarının eklenmesi; sunucuda zaman kayması toleransı kontrolüyle süresi geçmiş/tekrar oynatılabilir isteklerin reddedilmesi.
-- Transaction `POST` çağrıları için imza doğrulama (örn. HMAC) mekanizmasının eklenmesi; imza hesaplamasında `http method`, `path`, `request body` ve `timestamp` bilgisinin zorunlu tutulması.
+- Eşzamanlılık ve tenant izolasyonuna odaklı integration test kapsamının genişletilmesi.
 
 ## Notlar
 
