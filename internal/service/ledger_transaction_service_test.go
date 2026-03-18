@@ -14,11 +14,11 @@ import (
 )
 
 type stubLedgerTransactionRepo struct {
-	getByIDFn            func(ctx context.Context, tenantSchema, transactionID string) (repository.TransactionRow, error)
-	getByReferenceFn     func(ctx context.Context, tenantSchema, reference string) (repository.TransactionRow, error)
-	listFn               func(ctx context.Context, tenantSchema, status string, limit, offset int) ([]repository.TransactionRow, error)
-	countFn              func(ctx context.Context, tenantSchema, status string) (int64, error)
-	createPendingTxnFn   func(ctx context.Context, tenantSchema string, params repository.CreatePendingTransactionParams) (repository.TransactionRow, error)
+	getByIDFn          func(ctx context.Context, tenantSchema, transactionID string) (repository.TransactionRow, error)
+	getByReferenceFn   func(ctx context.Context, tenantSchema, reference string) (repository.TransactionRow, error)
+	listFn             func(ctx context.Context, tenantSchema, status string, limit, offset int) ([]repository.TransactionRow, error)
+	countFn            func(ctx context.Context, tenantSchema, status string) (int64, error)
+	createPendingTxnFn func(ctx context.Context, tenantSchema string, params repository.CreatePendingTransactionParams) (repository.TransactionRow, error)
 }
 
 func (s *stubLedgerTransactionRepo) GetTransactionByID(ctx context.Context, tenantSchema, transactionID string) (repository.TransactionRow, error) {

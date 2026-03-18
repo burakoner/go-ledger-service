@@ -67,4 +67,3 @@ func (r *PostgresTenantRepository) FindByAPIKeyHash(ctx context.Context, apiKeyH
 
 	return tenantValue, nil
 }
-

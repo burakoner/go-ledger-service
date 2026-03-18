@@ -33,4 +33,3 @@ func HashAPIKey(plainAPIKey string) string {
 	sum := sha256.Sum256([]byte(plainAPIKey))
 	return hex.EncodeToString(sum[:])
 }
-
