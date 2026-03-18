@@ -13,12 +13,18 @@ type LedgerAPIConfig struct {
 	DatabaseURL    string
 	RedisAddr      string
 	IdempotencyTTL time.Duration
+	DBMaxOpenConns int
+	DBMaxIdleConns int
+	DBConnMaxLife  time.Duration
 }
 
 type LedgerWorkerConfig struct {
 	DatabaseURL     string
 	WorkerCount     int
 	WebhookMaxRetry int
+	DBMaxOpenConns  int
+	DBMaxIdleConns  int
+	DBConnMaxLife   time.Duration
 }
 
 func LoadLedgerAPIConfigFromEnv() (LedgerAPIConfig, error) {
@@ -47,11 +53,19 @@ func LoadLedgerAPIConfigFromEnv() (LedgerAPIConfig, error) {
 		idempotencyTTL = time.Duration(parsedSeconds) * time.Second
 	}
 
+	maxOpenConns, maxIdleConns, connMaxLife, err := loadDBPoolSettingsFromEnv()
+	if err != nil {
+		return LedgerAPIConfig{}, err
+	}
+
 	return LedgerAPIConfig{
 		Port:           port,
 		DatabaseURL:    databaseURL,
 		RedisAddr:      os.Getenv("REDIS_ADDR"),
 		IdempotencyTTL: idempotencyTTL,
+		DBMaxOpenConns: maxOpenConns,
+		DBMaxIdleConns: maxIdleConns,
+		DBConnMaxLife:  connMaxLife,
 	}, nil
 }
 
@@ -89,9 +103,69 @@ func LoadLedgerWorkerConfigFromEnv() (LedgerWorkerConfig, error) {
 		webhookMaxRetry = parsed
 	}
 
+	maxOpenConns, maxIdleConns, connMaxLife, err := loadDBPoolSettingsFromEnv()
+	if err != nil {
+		return LedgerWorkerConfig{}, err
+	}
+
 	return LedgerWorkerConfig{
 		DatabaseURL:     databaseURL,
 		WorkerCount:     workerCount,
 		WebhookMaxRetry: webhookMaxRetry,
+		DBMaxOpenConns:  maxOpenConns,
+		DBMaxIdleConns:  maxIdleConns,
+		DBConnMaxLife:   connMaxLife,
 	}, nil
+}
+
+func loadDBPoolSettingsFromEnv() (int, int, time.Duration, error) {
+	const (
+		defaultDBMaxOpenConns    = 25
+		defaultDBMaxIdleConns    = 10
+		defaultDBConnMaxLifetime = 300 * time.Second
+	)
+
+	maxOpenConns := defaultDBMaxOpenConns
+	rawMaxOpenConns := strings.TrimSpace(os.Getenv("POSTGRES_MAX_OPEN_CONNS"))
+	if rawMaxOpenConns != "" {
+		parsed, err := strconv.Atoi(rawMaxOpenConns)
+		if err != nil {
+			return 0, 0, 0, errors.New("POSTGRES_MAX_OPEN_CONNS must be a valid integer")
+		}
+		if parsed <= 0 {
+			return 0, 0, 0, errors.New("POSTGRES_MAX_OPEN_CONNS must be greater than 0")
+		}
+		maxOpenConns = parsed
+	}
+
+	maxIdleConns := defaultDBMaxIdleConns
+	rawMaxIdleConns := strings.TrimSpace(os.Getenv("POSTGRES_MAX_IDLE_CONNS"))
+	if rawMaxIdleConns != "" {
+		parsed, err := strconv.Atoi(rawMaxIdleConns)
+		if err != nil {
+			return 0, 0, 0, errors.New("POSTGRES_MAX_IDLE_CONNS must be a valid integer")
+		}
+		if parsed < 0 {
+			return 0, 0, 0, errors.New("POSTGRES_MAX_IDLE_CONNS must be >= 0")
+		}
+		maxIdleConns = parsed
+	}
+	if maxIdleConns > maxOpenConns {
+		maxIdleConns = maxOpenConns
+	}
+
+	connMaxLife := defaultDBConnMaxLifetime
+	rawConnMaxLife := strings.TrimSpace(os.Getenv("POSTGRES_CONN_MAX_LIFETIME_SECONDS"))
+	if rawConnMaxLife != "" {
+		parsed, err := strconv.Atoi(rawConnMaxLife)
+		if err != nil {
+			return 0, 0, 0, errors.New("POSTGRES_CONN_MAX_LIFETIME_SECONDS must be a valid integer")
+		}
+		if parsed <= 0 {
+			return 0, 0, 0, errors.New("POSTGRES_CONN_MAX_LIFETIME_SECONDS must be greater than 0")
+		}
+		connMaxLife = time.Duration(parsed) * time.Second
+	}
+
+	return maxOpenConns, maxIdleConns, connMaxLife, nil
 }

@@ -21,7 +21,11 @@ func main() {
 		log.Fatalf("failed to load ledger-api config: %v", err)
 	}
 
-	postgresDB, err := db.OpenPostgres(cfg.DatabaseURL)
+	postgresDB, err := db.OpenPostgres(cfg.DatabaseURL, db.PoolConfig{
+		MaxOpenConns:    cfg.DBMaxOpenConns,
+		MaxIdleConns:    cfg.DBMaxIdleConns,
+		ConnMaxLifetime: cfg.DBConnMaxLife,
+	})
 	if err != nil {
 		log.Fatalf("failed to open database connection: %v", err)
 	}

@@ -45,7 +45,11 @@ func Run(ctx context.Context, cfg config.LedgerWorkerConfig) error {
 		return errors.New("webhook max retry must be greater than 0")
 	}
 
-	postgresDB, err := db.OpenPostgres(cfg.DatabaseURL)
+	postgresDB, err := db.OpenPostgres(cfg.DatabaseURL, db.PoolConfig{
+		MaxOpenConns:    cfg.DBMaxOpenConns,
+		MaxIdleConns:    cfg.DBMaxIdleConns,
+		ConnMaxLifetime: cfg.DBConnMaxLife,
+	})
 	if err != nil {
 		return fmt.Errorf("open database connection: %w", err)
 	}
