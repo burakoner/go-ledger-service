@@ -19,8 +19,8 @@ CREATE TABLE IF NOT EXISTS __TENANT_SCHEMA__.transactions (
     processed_at TIMESTAMPTZ NULL
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_reference_unique
-    ON __TENANT_SCHEMA__.transactions (reference);
+CREATE INDEX IF NOT EXISTS idx_transactions_reference_created_at
+    ON __TENANT_SCHEMA__.transactions (reference, created_at DESC, id DESC);
 
 CREATE TABLE IF NOT EXISTS __TENANT_SCHEMA__.balances (
     id SMALLINT PRIMARY KEY,

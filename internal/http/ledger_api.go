@@ -492,6 +492,10 @@ func (a *LedgerAPI) tryReplayFromIdempotencyState(
 
 	existingByReference, byReferenceErr := a.transactionService.GetTransactionByReference(ctx, tenantValue, reference)
 	if byReferenceErr == nil {
+		if !a.isReplayableByTTL(existingByReference.CreatedAt) {
+			return false, nil
+		}
+
 		if markErr := a.cacheAcceptedTransactionResponse(ctx, tenantValue.TenantID, reference, existingByReference); markErr != nil {
 			log.Printf("idempotency mark completed failed: %v", markErr)
 		}
@@ -503,6 +507,25 @@ func (a *LedgerAPI) tryReplayFromIdempotencyState(
 	}
 
 	return false, byReferenceErr
+}
+
+func (a *LedgerAPI) isReplayableByTTL(createdAt time.Time) bool {
+	if createdAt.IsZero() {
+		return false
+	}
+
+	ttl := a.idempotencyTTL
+	if ttl <= 0 {
+		ttl = defaultTransactionIdempotency
+	}
+
+	now := time.Now().UTC()
+	createdAt = createdAt.UTC()
+	if now.Before(createdAt) {
+		return true
+	}
+
+	return now.Sub(createdAt) <= ttl
 }
 
 func (a *LedgerAPI) waitForReplayableTransaction(
