@@ -37,6 +37,7 @@ type BeginResult struct {
 // ReferenceStore provides idempotency control for transaction references.
 type ReferenceStore interface {
 	Begin(ctx context.Context, tenantID, reference, requestID string, ttl time.Duration) (BeginResult, error)
+	Peek(ctx context.Context, tenantID, reference string) (BeginResult, error)
 	MarkCompleted(ctx context.Context, tenantID, reference, transactionID string, cachedResponse CachedResponse, ttl time.Duration) error
 	Clear(ctx context.Context, tenantID, reference string) error
 }
@@ -100,35 +101,31 @@ func (s *RedisReferenceStore) Begin(ctx context.Context, tenantID, reference, re
 		return BeginResult{}, fmt.Errorf("get idempotency key: %w", err)
 	}
 
-	if parsedRecord, ok := parseStateRecord(currentValue); ok {
-		switch parsedRecord.State {
-		case stateCompleted:
-			result := BeginResult{
-				CompletedTransactionID: strings.TrimSpace(parsedRecord.TransactionID),
-			}
-			if parsedRecord.StatusCode > 0 && len(parsedRecord.Body) > 0 {
-				bodyCopy := append([]byte(nil), parsedRecord.Body...)
-				result.CompletedResponse = &CachedResponse{
-					StatusCode: parsedRecord.StatusCode,
-					Body:       bodyCopy,
-				}
-			}
-			return result, nil
-		case statePending:
-			return BeginResult{InProgress: true}, nil
-		}
+	return decodeStateValue(currentValue), nil
+}
+
+// Peek reads the current idempotency key state without trying to acquire a new lock.
+func (s *RedisReferenceStore) Peek(ctx context.Context, tenantID, reference string) (BeginResult, error) {
+	if s == nil || s.client == nil {
+		return BeginResult{}, errors.New("idempotency redis store is not initialized")
 	}
 
-	if strings.HasPrefix(currentValue, completedValuePrefix) {
-		transactionID := strings.TrimPrefix(currentValue, completedValuePrefix)
-		if transactionID != "" {
-			return BeginResult{
-				CompletedTransactionID: transactionID,
-			}, nil
-		}
+	tenantID = strings.TrimSpace(tenantID)
+	reference = strings.TrimSpace(reference)
+	if tenantID == "" || reference == "" {
+		return BeginResult{}, errors.New("tenant id and reference are required")
 	}
 
-	return BeginResult{InProgress: true}, nil
+	key := buildKey(tenantID, reference)
+	currentValue, err := s.client.Get(ctx, key).Result()
+	if err != nil {
+		if err == redis.Nil {
+			return BeginResult{}, nil
+		}
+		return BeginResult{}, fmt.Errorf("get idempotency key: %w", err)
+	}
+
+	return decodeStateValue(currentValue), nil
 }
 
 // MarkCompleted stores created transaction id for replay responses.
@@ -213,4 +210,40 @@ func parseStateRecord(raw string) (referenceStateRecord, bool) {
 	}
 
 	return record, true
+}
+
+func decodeStateValue(raw string) BeginResult {
+	if parsedRecord, ok := parseStateRecord(raw); ok {
+		switch parsedRecord.State {
+		case stateCompleted:
+			result := BeginResult{
+				CompletedTransactionID: strings.TrimSpace(parsedRecord.TransactionID),
+			}
+			if parsedRecord.StatusCode > 0 && len(parsedRecord.Body) > 0 {
+				bodyCopy := append([]byte(nil), parsedRecord.Body...)
+				result.CompletedResponse = &CachedResponse{
+					StatusCode: parsedRecord.StatusCode,
+					Body:       bodyCopy,
+				}
+			}
+			return result
+		case statePending:
+			return BeginResult{InProgress: true}
+		}
+	}
+
+	if strings.HasPrefix(raw, completedValuePrefix) {
+		transactionID := strings.TrimPrefix(raw, completedValuePrefix)
+		if transactionID != "" {
+			return BeginResult{
+				CompletedTransactionID: transactionID,
+			}
+		}
+	}
+
+	if raw == "" {
+		return BeginResult{}
+	}
+
+	return BeginResult{InProgress: true}
 }

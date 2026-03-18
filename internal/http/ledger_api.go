@@ -20,6 +20,8 @@ import (
 const (
 	healthTimeout             = 2 * time.Second
 	transactionIdempotencyTTL = 24 * time.Hour
+	idempotencyReplayWait     = 1500 * time.Millisecond
+	idempotencyReplayPoll     = 50 * time.Millisecond
 	balanceDecimalDigits      = 2
 )
 
@@ -299,49 +301,23 @@ func (a *LedgerAPI) handleTransactionPlace(w http.ResponseWriter, r *http.Reques
 	}
 
 	if !beginState.Acquired {
-		if beginState.CompletedResponse != nil {
-			writeRawIdempotentResponse(
-				w,
-				beginState.CompletedResponse.StatusCode,
-				beginState.CompletedResponse.Body,
-				true,
-			)
-			return
-		}
-
-		if beginState.CompletedTransactionID != "" {
-			existingByID, byIDErr := a.transactionService.GetTransactionByID(r.Context(), tenantValue, beginState.CompletedTransactionID)
-			if byIDErr == nil {
-				if markErr := a.cacheAcceptedTransactionResponse(
-					r.Context(),
-					tenantValue.TenantID,
-					req.Reference,
-					existingByID,
-				); markErr != nil {
-					log.Printf("idempotency mark completed failed: %v", markErr)
-				}
-				writeTransactionReplayResponse(w, tenantValue.TenantID, existingByID)
-				return
-			}
-			log.Printf("idempotency cached transaction lookup failed: %v", byIDErr)
-		}
-
-		existingByReference, byReferenceErr := a.transactionService.GetTransactionByReference(r.Context(), tenantValue, req.Reference)
-		if byReferenceErr == nil {
-			if markErr := a.cacheAcceptedTransactionResponse(
-				r.Context(),
-				tenantValue.TenantID,
-				req.Reference,
-				existingByReference,
-			); markErr != nil {
-				log.Printf("idempotency mark completed failed: %v", markErr)
-			}
-			writeTransactionReplayResponse(w, tenantValue.TenantID, existingByReference)
-			return
-		}
-		if !errors.Is(byReferenceErr, service.ErrTransactionNotFound) {
-			log.Printf("idempotency fallback lookup failed: %v", byReferenceErr)
+		replayed, replayErr := a.tryReplayFromIdempotencyState(r.Context(), w, tenantValue, req.Reference, beginState)
+		if replayErr != nil {
+			log.Printf("idempotency replay resolve failed: %v", replayErr)
 			writeAPIError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to resolve idempotent request")
+			return
+		}
+		if replayed {
+			return
+		}
+
+		replayed, replayErr = a.waitForReplayableTransaction(r.Context(), w, tenantValue, req.Reference)
+		if replayErr != nil {
+			log.Printf("idempotency replay wait failed: %v", replayErr)
+			writeAPIError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to resolve idempotent request")
+			return
+		}
+		if replayed {
 			return
 		}
 
@@ -473,6 +449,89 @@ func (a *LedgerAPI) cacheAcceptedTransactionResponse(
 		},
 		transactionIdempotencyTTL,
 	)
+}
+
+func (a *LedgerAPI) tryReplayFromIdempotencyState(
+	ctx context.Context,
+	w http.ResponseWriter,
+	tenantValue tenant.ContextValue,
+	reference string,
+	state idempotency.BeginResult,
+) (bool, error) {
+	if state.CompletedResponse != nil {
+		writeRawIdempotentResponse(
+			w,
+			state.CompletedResponse.StatusCode,
+			state.CompletedResponse.Body,
+			true,
+		)
+		return true, nil
+	}
+
+	if state.CompletedTransactionID != "" {
+		existingByID, byIDErr := a.transactionService.GetTransactionByID(ctx, tenantValue, state.CompletedTransactionID)
+		if byIDErr == nil {
+			if markErr := a.cacheAcceptedTransactionResponse(ctx, tenantValue.TenantID, reference, existingByID); markErr != nil {
+				log.Printf("idempotency mark completed failed: %v", markErr)
+			}
+			writeTransactionReplayResponse(w, tenantValue.TenantID, existingByID)
+			return true, nil
+		}
+
+		if !errors.Is(byIDErr, service.ErrTransactionNotFound) && !errors.Is(byIDErr, service.ErrInvalidTransactionQuery) {
+			return false, byIDErr
+		}
+	}
+
+	existingByReference, byReferenceErr := a.transactionService.GetTransactionByReference(ctx, tenantValue, reference)
+	if byReferenceErr == nil {
+		if markErr := a.cacheAcceptedTransactionResponse(ctx, tenantValue.TenantID, reference, existingByReference); markErr != nil {
+			log.Printf("idempotency mark completed failed: %v", markErr)
+		}
+		writeTransactionReplayResponse(w, tenantValue.TenantID, existingByReference)
+		return true, nil
+	}
+	if errors.Is(byReferenceErr, service.ErrTransactionNotFound) {
+		return false, nil
+	}
+
+	return false, byReferenceErr
+}
+
+func (a *LedgerAPI) waitForReplayableTransaction(
+	ctx context.Context,
+	w http.ResponseWriter,
+	tenantValue tenant.ContextValue,
+	reference string,
+) (bool, error) {
+	waitCtx, cancel := context.WithTimeout(ctx, idempotencyReplayWait)
+	defer cancel()
+
+	ticker := time.NewTicker(idempotencyReplayPoll)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-waitCtx.Done():
+			if errors.Is(waitCtx.Err(), context.DeadlineExceeded) {
+				return false, nil
+			}
+			return false, waitCtx.Err()
+		case <-ticker.C:
+			state, peekErr := a.idempotencyStore.Peek(waitCtx, tenantValue.TenantID, reference)
+			if peekErr != nil {
+				return false, peekErr
+			}
+
+			replayed, replayErr := a.tryReplayFromIdempotencyState(waitCtx, w, tenantValue, reference, state)
+			if replayErr != nil {
+				return false, replayErr
+			}
+			if replayed {
+				return true, nil
+			}
+		}
+	}
 }
 
 func writeTransactionAcceptedResponse(w http.ResponseWriter, tenantID string, transaction service.TransactionResult) {
