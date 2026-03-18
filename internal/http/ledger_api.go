@@ -299,9 +299,27 @@ func (a *LedgerAPI) handleTransactionPlace(w http.ResponseWriter, r *http.Reques
 	}
 
 	if !beginState.Acquired {
+		if beginState.CompletedResponse != nil {
+			writeRawIdempotentResponse(
+				w,
+				beginState.CompletedResponse.StatusCode,
+				beginState.CompletedResponse.Body,
+				true,
+			)
+			return
+		}
+
 		if beginState.CompletedTransactionID != "" {
 			existingByID, byIDErr := a.transactionService.GetTransactionByID(r.Context(), tenantValue, beginState.CompletedTransactionID)
 			if byIDErr == nil {
+				if markErr := a.cacheAcceptedTransactionResponse(
+					r.Context(),
+					tenantValue.TenantID,
+					req.Reference,
+					existingByID,
+				); markErr != nil {
+					log.Printf("idempotency mark completed failed: %v", markErr)
+				}
 				writeTransactionReplayResponse(w, tenantValue.TenantID, existingByID)
 				return
 			}
@@ -310,12 +328,11 @@ func (a *LedgerAPI) handleTransactionPlace(w http.ResponseWriter, r *http.Reques
 
 		existingByReference, byReferenceErr := a.transactionService.GetTransactionByReference(r.Context(), tenantValue, req.Reference)
 		if byReferenceErr == nil {
-			if markErr := a.idempotencyStore.MarkCompleted(
+			if markErr := a.cacheAcceptedTransactionResponse(
 				r.Context(),
 				tenantValue.TenantID,
 				req.Reference,
-				existingByReference.ID,
-				transactionIdempotencyTTL,
+				existingByReference,
 			); markErr != nil {
 				log.Printf("idempotency mark completed failed: %v", markErr)
 			}
@@ -343,12 +360,11 @@ func (a *LedgerAPI) handleTransactionPlace(w http.ResponseWriter, r *http.Reques
 		if errors.Is(err, service.ErrTransactionReferenceAlreadyExists) {
 			existingByReference, byReferenceErr := a.transactionService.GetTransactionByReference(r.Context(), tenantValue, req.Reference)
 			if byReferenceErr == nil {
-				if markErr := a.idempotencyStore.MarkCompleted(
+				if markErr := a.cacheAcceptedTransactionResponse(
 					r.Context(),
 					tenantValue.TenantID,
 					req.Reference,
-					existingByReference.ID,
-					transactionIdempotencyTTL,
+					existingByReference,
 				); markErr != nil {
 					log.Printf("idempotency mark completed failed after duplicate: %v", markErr)
 				}
@@ -372,23 +388,17 @@ func (a *LedgerAPI) handleTransactionPlace(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if markErr := a.idempotencyStore.MarkCompleted(
+	if markErr := a.cacheAcceptedTransactionResponse(
 		r.Context(),
 		tenantValue.TenantID,
 		req.Reference,
-		result.ID,
-		transactionIdempotencyTTL,
+		result,
 	); markErr != nil {
 		// Transaction is already stored in DB. We only log redis failure.
 		log.Printf("idempotency mark completed failed: %v", markErr)
 	}
 
-	w.Header().Set("Idempotency-Replayed", "false")
-	writeJSON(w, http.StatusAccepted, map[string]interface{}{
-		"tenant_id":    tenantValue.TenantID,
-		"transaction":  result,
-		"queue_status": "pending",
-	})
+	writeTransactionAcceptedResponse(w, tenantValue.TenantID, result)
 }
 
 func (a *LedgerAPI) handleTransactionByID(w http.ResponseWriter, r *http.Request) {
@@ -435,13 +445,87 @@ func (a *LedgerAPI) handleTransactionByID(w http.ResponseWriter, r *http.Request
 	})
 }
 
+type transactionAcceptedResponse struct {
+	TenantID    string                    `json:"tenant_id"`
+	Transaction service.TransactionResult `json:"transaction"`
+	QueueStatus string                    `json:"queue_status"`
+}
+
+func (a *LedgerAPI) cacheAcceptedTransactionResponse(
+	ctx context.Context,
+	tenantID,
+	reference string,
+	transaction service.TransactionResult,
+) error {
+	responseBody, err := encodeTransactionAcceptedResponse(tenantID, transaction)
+	if err != nil {
+		return err
+	}
+
+	return a.idempotencyStore.MarkCompleted(
+		ctx,
+		tenantID,
+		reference,
+		transaction.ID,
+		idempotency.CachedResponse{
+			StatusCode: http.StatusAccepted,
+			Body:       responseBody,
+		},
+		transactionIdempotencyTTL,
+	)
+}
+
+func writeTransactionAcceptedResponse(w http.ResponseWriter, tenantID string, transaction service.TransactionResult) {
+	responseBody, err := encodeTransactionAcceptedResponse(tenantID, transaction)
+	if err != nil {
+		log.Printf("transaction response encode failed: %v", err)
+		writeRawIdempotentResponse(w, http.StatusAccepted, []byte(`{}`), false)
+		return
+	}
+
+	writeRawIdempotentResponse(w, http.StatusAccepted, responseBody, false)
+}
+
 func writeTransactionReplayResponse(w http.ResponseWriter, tenantID string, transaction service.TransactionResult) {
-	w.Header().Set("Idempotency-Replayed", "true")
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"tenant_id":    tenantID,
-		"transaction":  transaction,
-		"queue_status": "pending",
-	})
+	responseBody, err := encodeTransactionAcceptedResponse(tenantID, transaction)
+	if err != nil {
+		log.Printf("transaction replay response encode failed: %v", err)
+		writeRawIdempotentResponse(w, http.StatusAccepted, []byte(`{}`), true)
+		return
+	}
+
+	writeRawIdempotentResponse(w, http.StatusAccepted, responseBody, true)
+}
+
+func encodeTransactionAcceptedResponse(tenantID string, transaction service.TransactionResult) ([]byte, error) {
+	response := transactionAcceptedResponse{
+		TenantID:    tenantID,
+		Transaction: transaction,
+		QueueStatus: "pending",
+	}
+
+	return json.Marshal(response)
+}
+
+func writeRawIdempotentResponse(w http.ResponseWriter, statusCode int, body []byte, replayed bool) {
+	if replayed {
+		w.Header().Set("Idempotency-Replayed", "true")
+	} else {
+		w.Header().Set("Idempotency-Replayed", "false")
+	}
+
+	if statusCode <= 0 {
+		statusCode = http.StatusAccepted
+	}
+	if len(body) == 0 {
+		body = []byte(`{}`)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	if _, err := w.Write(body); err != nil {
+		log.Printf("failed to write raw idempotent response: %v", err)
+	}
 }
 
 func parsePaginationQuery(r *http.Request) (int, int, error) {
