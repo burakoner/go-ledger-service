@@ -5,12 +5,14 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type LedgerAPIConfig struct {
-	Port        string
-	DatabaseURL string
-	RedisAddr   string
+	Port           string
+	DatabaseURL    string
+	RedisAddr      string
+	IdempotencyTTL time.Duration
 }
 
 type LedgerWorkerConfig struct {
@@ -19,6 +21,8 @@ type LedgerWorkerConfig struct {
 }
 
 func LoadLedgerAPIConfigFromEnv() (LedgerAPIConfig, error) {
+	const defaultIdempotencyTTL = 24 * time.Hour
+
 	port := os.Getenv("LEDGER_API_PORT")
 	if port == "" {
 		port = "8080"
@@ -29,10 +33,24 @@ func LoadLedgerAPIConfigFromEnv() (LedgerAPIConfig, error) {
 		return LedgerAPIConfig{}, errors.New("DATABASE_URL is required")
 	}
 
+	idempotencyTTL := defaultIdempotencyTTL
+	rawTTLSeconds := strings.TrimSpace(os.Getenv("IDEMPOTENCY_TTL_SECONDS"))
+	if rawTTLSeconds != "" {
+		parsedSeconds, err := strconv.Atoi(rawTTLSeconds)
+		if err != nil {
+			return LedgerAPIConfig{}, errors.New("IDEMPOTENCY_TTL_SECONDS must be a valid integer")
+		}
+		if parsedSeconds <= 0 {
+			return LedgerAPIConfig{}, errors.New("IDEMPOTENCY_TTL_SECONDS must be greater than 0")
+		}
+		idempotencyTTL = time.Duration(parsedSeconds) * time.Second
+	}
+
 	return LedgerAPIConfig{
-		Port:        port,
-		DatabaseURL: databaseURL,
-		RedisAddr:   os.Getenv("REDIS_ADDR"),
+		Port:           port,
+		DatabaseURL:    databaseURL,
+		RedisAddr:      os.Getenv("REDIS_ADDR"),
+		IdempotencyTTL: idempotencyTTL,
 	}, nil
 }
 

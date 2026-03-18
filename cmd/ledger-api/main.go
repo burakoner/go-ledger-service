@@ -70,6 +70,7 @@ func main() {
 		ledgerEntryService,
 		transactionService,
 		idempotencyStore,
+		cfg.IdempotencyTTL,
 	)
 
 	addr := ":" + cfg.Port

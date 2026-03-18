@@ -18,11 +18,11 @@ import (
 )
 
 const (
-	healthTimeout             = 2 * time.Second
-	transactionIdempotencyTTL = 24 * time.Hour
-	idempotencyReplayWait     = 1500 * time.Millisecond
-	idempotencyReplayPoll     = 50 * time.Millisecond
-	balanceDecimalDigits      = 2
+	healthTimeout                 = 2 * time.Second
+	defaultTransactionIdempotency = 24 * time.Hour
+	idempotencyReplayWait         = 1500 * time.Millisecond
+	idempotencyReplayPoll         = 50 * time.Millisecond
+	balanceDecimalDigits          = 2
 )
 
 type LedgerAPI struct {
@@ -32,6 +32,7 @@ type LedgerAPI struct {
 	ledgerEntry        service.LedgerEntryService
 	transactionService service.LedgerTransactionService
 	idempotencyStore   idempotency.ReferenceStore
+	idempotencyTTL     time.Duration
 }
 
 func NewLedgerAPI(
@@ -41,7 +42,12 @@ func NewLedgerAPI(
 	ledgerEntry service.LedgerEntryService,
 	transactionService service.LedgerTransactionService,
 	idempotencyStore idempotency.ReferenceStore,
+	idempotencyTTL time.Duration,
 ) *LedgerAPI {
+	if idempotencyTTL <= 0 {
+		idempotencyTTL = defaultTransactionIdempotency
+	}
+
 	return &LedgerAPI{
 		db:                 db,
 		tenantAuthService:  tenantAuthService,
@@ -49,6 +55,7 @@ func NewLedgerAPI(
 		ledgerEntry:        ledgerEntry,
 		transactionService: transactionService,
 		idempotencyStore:   idempotencyStore,
+		idempotencyTTL:     idempotencyTTL,
 	}
 }
 
@@ -292,7 +299,7 @@ func (a *LedgerAPI) handleTransactionPlace(w http.ResponseWriter, r *http.Reques
 		tenantValue.TenantID,
 		req.Reference,
 		requestIDFromContext(r.Context()),
-		transactionIdempotencyTTL,
+		a.idempotencyTTL,
 	)
 	if err != nil {
 		log.Printf("idempotency begin failed: %v", err)
@@ -447,7 +454,7 @@ func (a *LedgerAPI) cacheAcceptedTransactionResponse(
 			StatusCode: http.StatusAccepted,
 			Body:       responseBody,
 		},
-		transactionIdempotencyTTL,
+		a.idempotencyTTL,
 	)
 }
 
