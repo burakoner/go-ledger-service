@@ -129,9 +129,9 @@ Tenant metadata verileri ortak `public` şemasında tutulur (`tenant_accounts`, 
 Redis şu amaçlarla kullanılır:
 
 - idempotency key kontrolü (TTL tabanlı tekrar oynatma penceresi)
-- tenant bazlı rate limiting
+- tenant bazlı rate limiting kontrolü
 
-Gerekçe: Redis düşük gecikmeli key kontrolü ve doğal süre sonu (expiration) desteği sağlar. Bu sayede idempotency ve rate limit mantığı daha basit ve hızlı uygulanır.
+Gerekçe: Redis düşük gecikmeli key kontrolü ve doğal süre sonu (expiration) desteği sağlar. Bu sayede idempotency ve rate limiting mantığı hızlı ve basit şekilde uygulanır.
 
 ## Tasarım Kararları ve Trade-Off'lar
 
@@ -150,9 +150,9 @@ Gerekçe: Redis düşük gecikmeli key kontrolü ve doğal süre sonu (expiratio
 - Artı: ek broker bağımlılığı olmadan API ve worker ayrımı korunur.
 - Eksi: yüksek tenant sayısında worker tarama stratejisi dikkatli tasarlanmalıdır.
 
-4. Idempotency ve rate limit kontrolleri PostgreSQL dışında Redis’te tutuldu.
+4. Idempotency ve rate limiting kontrolleri PostgreSQL dışında Redis’te tutuldu.
 
-- Artı: tekrar istek tespiti ve limit kontrolü daha hızlı ve basit olur.
+- Artı: tekrar istek tespiti ve tenant bazlı limit kontrolü düşük gecikmeyle yapılır.
 - Eksi: kalıcılık (durability) beklentileri için ek strateji netleştirilmelidir.
 
 ## Sonraki İyileştirme Adımları
@@ -174,4 +174,4 @@ Gerekçe: Redis düşük gecikmeli key kontrolü ve doğal süre sonu (expiratio
 
 ## Notlar
 
-- `ledger-api` ve `ledger-worker` tarafında `internal` katmanları aktif olarak kullanıldı. `ledger-admin` için aynı refactor teknik olarak uygun olsa da, mevcut task kapsamına onboarding dahil olmadığında bu servis bilinçli olarak daha sade bırakıldı.
+- `ledger-api` ve `ledger-worker` tarafında `internal` katmanları aktif olarak kullanıldı. `ledger-admin` için aynı refactor teknik olarak mümkün olsa da, task kapsamına odaklanmak için bu servis bilinçli olarak daha sade tutuldu ve `internal` katmanına taşınmadı.
