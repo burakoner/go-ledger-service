@@ -122,6 +122,8 @@ services:
       - postgres_data:/var/lib/postgresql/data
       # Run public migration automatically on first DB initialization.
       - ./migrations/0001_init_public.sql:/docker-entrypoint-initdb.d/0001_init_public.sql:ro
+      # Seed demo tenants and tenant-local transactions on first DB initialization.
+      - ./migrations/0003_seed_demo_data.sql:/docker-entrypoint-initdb.d/0003_seed_demo_data.sql:ro
     networks:
       - ledger-net
 
