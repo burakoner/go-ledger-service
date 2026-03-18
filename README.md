@@ -4,7 +4,7 @@
 
 ```bash
 cp .env.example .env
-docker compose up --build
+docker compose up -d --build
 ```
 
 Sağlık kontrolleri:
