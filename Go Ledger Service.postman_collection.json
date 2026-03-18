@@ -35,7 +35,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\r\n    \"tenant_code\": \"Tenant Code 20\",\r\n    \"name\": \"Tenant Name 20\",\r\n    \"currency\": \"EUR\",\r\n    \"configs\": {\r\n        \"webhook_enabled\": true,\r\n        \"webhook_url\": \"http://webhook-receiver:8088/webhooks/transactions\",\r\n        \"webhook_retry\": 3,\r\n        \"webhook_delay_seconds\": 5\r\n    }\r\n}",
+              "raw": "{\r\n    \"tenant_code\": \"Tenant Code 20\",\r\n    \"name\": \"Tenant Name 20\",\r\n    \"currency\": \"EUR\",\r\n    \"configs\": {\r\n        \"webhook_enabled\": true,\r\n        \"webhook_url\": \"http://webhook-receiver:8088/webhooks/transactions\"\r\n    }\r\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -232,7 +232,7 @@
     },
     {
       "key": "tenantApiKey",
-      "value": "TK_9OWBmUL64YC7WsBZ8NYa10VIsQ9VFQqP0SPZVYd55RdNw3az"
+      "value": "TK_SeedAlphaA1B2C3D4E5F6G7H8J9K0L1M2N3"
     }
   ]
 }
