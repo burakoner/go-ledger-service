@@ -129,6 +129,7 @@ func sendWebhook(ctx context.Context, client *http.Client, endpoint string, payl
 	}
 	req.Header.Set("Content-Type", "application/json")
 
+	fmt.Printf("sending webhook to %s with payload: %s\n", endpoint, string(payload))
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("execute webhook request: %w", err)

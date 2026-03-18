@@ -62,6 +62,8 @@ func handleTransactionWebhook(w http.ResponseWriter, r *http.Request) {
 		_ = r.Body.Close()
 	}()
 
+	log.Printf("Received webhook request. method=%s path=%s remote=%s", r.Method, r.URL.Path, r.RemoteAddr)
+
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxWebhookBodyBytes))
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{
