@@ -48,21 +48,4 @@ CREATE TABLE IF NOT EXISTS public.tenant_configs (
     PRIMARY KEY (tenant_id, key)
 );
 
--- Webhook delivery outbox with retry state.
-CREATE TABLE IF NOT EXISTS public.tenant_webhook_outbox (
-    id BIGSERIAL PRIMARY KEY,
-    tenant_id UUID NOT NULL REFERENCES public.tenant_accounts(id) ON DELETE CASCADE,
-    transaction_id UUID NOT NULL,
-    payload JSONB NOT NULL,
-    attempt_count INT NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
-    next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'dead')),
-    last_error TEXT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_tenant_webhook_outbox_status_next_attempt_at
-    ON public.tenant_webhook_outbox (status, next_attempt_at);
-
 COMMIT;

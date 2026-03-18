@@ -16,11 +16,10 @@ import (
 )
 
 const (
-	tenantRefreshInterval   = 15 * time.Second
-	tenantDispatchInterval  = 2 * time.Second
-	webhookDispatchInterval = 2 * time.Second
-	tenantQueryTimeout      = 5 * time.Second
-	jobQueueMultiplier      = 8
+	tenantRefreshInterval  = 15 * time.Second
+	tenantDispatchInterval = 2 * time.Second
+	tenantQueryTimeout     = 5 * time.Second
+	jobQueueMultiplier     = 8
 )
 
 type activeTenant struct {
@@ -77,7 +76,6 @@ func (r *runtime) run(ctx context.Context) error {
 	}
 
 	tenantJobs := make(chan activeTenant, queueSize)
-	webhookJobs := make(chan activeTenant, queueSize)
 
 	var wg sync.WaitGroup
 
@@ -93,24 +91,12 @@ func (r *runtime) run(ctx context.Context) error {
 		r.dispatchLoop(ctx, tenantJobs)
 	}()
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		r.dispatchWebhookLoop(ctx, webhookJobs)
-	}()
-
 	for i := 0; i < r.workerCount; i++ {
 		workerID := i + 1
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			r.transactionWorkerLoop(workerID, tenantJobs)
-		}()
-
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			r.webhookWorkerLoop(workerID, webhookJobs)
 		}()
 	}
 
@@ -156,25 +142,6 @@ func (r *runtime) dispatchLoop(ctx context.Context, jobs chan activeTenant) {
 	}
 }
 
-func (r *runtime) dispatchWebhookLoop(ctx context.Context, jobs chan activeTenant) {
-	defer close(jobs)
-
-	ticker := time.NewTicker(webhookDispatchInterval)
-	defer ticker.Stop()
-
-	// Run once immediately so webhook workers can start without waiting for ticker.
-	r.enqueueTenantJobs(ctx, jobs)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			r.enqueueTenantJobs(ctx, jobs)
-		}
-	}
-}
-
 func (r *runtime) transactionWorkerLoop(workerID int, jobs <-chan activeTenant) {
 	log.Printf("transaction worker-%d started.", workerID)
 	defer log.Printf("transaction worker-%d stopped.", workerID)
@@ -197,31 +164,6 @@ func (r *runtime) transactionWorkerLoop(workerID int, jobs <-chan activeTenant) 
 			processed.Status,
 			processed.TenantID,
 			processed.TenantSchema,
-		)
-	}
-}
-
-func (r *runtime) webhookWorkerLoop(workerID int, jobs <-chan activeTenant) {
-	log.Printf("webhook worker-%d started.", workerID)
-	defer log.Printf("webhook worker-%d stopped.", workerID)
-
-	for tenantValue := range jobs {
-		result, err := r.processNextPendingWebhook(context.Background(), tenantValue)
-		if err != nil {
-			log.Printf("webhook worker-%d failed for tenant=%s schema=%s: %v", workerID, tenantValue.TenantID, tenantValue.TenantSchema, err)
-			continue
-		}
-		if result == nil {
-			continue
-		}
-
-		log.Printf(
-			"webhook worker-%d processed outbox_id=%d status=%s attempt_count=%d tenant=%s",
-			workerID,
-			result.OutboxID,
-			result.Status,
-			result.AttemptCount,
-			tenantValue.TenantID,
 		)
 	}
 }

@@ -3,9 +3,9 @@ package worker
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/lib/pq"
@@ -69,12 +69,18 @@ func (r *runtime) processNextPendingTransaction(ctx context.Context, tenantValue
 		return nil, err
 	}
 
-	if err := insertWebhookOutbox(processCtx, tx, tenantValue.TenantID, pending.ID, pending.Reference, status, pending.Amount); err != nil {
-		return nil, err
-	}
-
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit transaction processing: %w", err)
+	}
+
+	if err := r.dispatchTransactionWebhookNow(context.Background(), tenantValue.TenantID, pending.ID, pending.Reference, status, pending.Amount); err != nil {
+		log.Printf(
+			"direct webhook delivery failed tenant=%s transaction=%s reference=%s: %v",
+			tenantValue.TenantID,
+			pending.ID,
+			pending.Reference,
+			err,
+		)
 	}
 
 	return &processedTransaction{
@@ -204,39 +210,6 @@ func updateTransactionTerminalStatus(ctx context.Context, tx *sql.Tx, tenantSche
 
 	if _, err := tx.ExecContext(ctx, query, transactionID, status, failureCodeValue, failureReasonValue); err != nil {
 		return fmt.Errorf("update transaction terminal status in schema %q: %w", tenantSchema, err)
-	}
-
-	return nil
-}
-
-func insertWebhookOutbox(ctx context.Context, tx *sql.Tx, tenantID, transactionID, reference, status string, amount int64) error {
-	payload, err := json.Marshal(map[string]interface{}{
-		"transaction_id": transactionID,
-		"reference":      reference,
-		"status":         status,
-		"amount":         amount,
-		"timestamp":      time.Now().UTC(),
-	})
-	if err != nil {
-		return fmt.Errorf("marshal webhook payload: %w", err)
-	}
-
-	const query = `
-		INSERT INTO public.tenant_webhook_outbox (
-			tenant_id,
-			transaction_id,
-			payload,
-			attempt_count,
-			next_attempt_at,
-			status,
-			created_at,
-			updated_at
-		)
-		VALUES ($1::uuid, $2::uuid, $3::jsonb, 0, now(), 'pending', now(), now())
-	`
-
-	if _, err := tx.ExecContext(ctx, query, tenantID, transactionID, payload); err != nil {
-		return fmt.Errorf("insert webhook outbox record: %w", err)
 	}
 
 	return nil
