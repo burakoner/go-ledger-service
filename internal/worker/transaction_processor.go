@@ -78,11 +78,8 @@ func (r *runtime) processNextPendingTransaction(ctx context.Context, tenantValue
 		tenantValue.TenantID,
 		pending.ID,
 		pending.Reference,
-		pending.Type,
 		status,
 		pending.Amount,
-		failureCode,
-		failureReason,
 	); err != nil {
 		log.Printf(
 			"direct webhook delivery failed tenant=%s transaction=%s reference=%s: %v",
