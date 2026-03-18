@@ -87,26 +87,19 @@ func (r *runtime) run(ctx context.Context) error {
 	tenantJobs := make(chan activeTenant, queueSize)
 
 	var wg sync.WaitGroup
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		r.tenantRefreshLoop(ctx)
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		r.dispatchLoop(ctx, tenantJobs)
-	}()
+	})
 
 	for i := 0; i < r.workerCount; i++ {
 		workerID := i + 1
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			r.transactionWorkerLoop(workerID, tenantJobs)
-		}()
+		})
 	}
 
 	<-ctx.Done()
