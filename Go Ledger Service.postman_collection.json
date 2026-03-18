@@ -16,12 +16,8 @@
             "header": [],
             "url": {
               "raw": "{{adminBaseUrl}}/health",
-              "host": [
-                "{{adminBaseUrl}}"
-              ],
-              "path": [
-                "health"
-              ]
+              "host": ["{{adminBaseUrl}}"],
+              "path": ["health"]
             }
           },
           "response": []
@@ -39,7 +35,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\r\n    \"tenant_code\": \"Tenant Code 18\",\r\n    \"name\": \"Tenant Name 18\",\r\n    \"currency\": \"EUR\",\r\n    \"configs\": {\r\n        \"webhook_enabled\": true,\r\n        \"webhook_url\": \"http://localhost:8088/webhooks/transactions\",\r\n        \"webhook_retry\": 3\r\n    }\r\n}",
+              "raw": "{\r\n    \"tenant_code\": \"Tenant Code 20\",\r\n    \"name\": \"Tenant Name 20\",\r\n    \"currency\": \"EUR\",\r\n    \"configs\": {\r\n        \"webhook_enabled\": true,\r\n        \"webhook_url\": \"http://webhook-receiver:8088/webhooks/transactions\",\r\n        \"webhook_retry\": 3,\r\n        \"webhook_delay_seconds\": 5\r\n    }\r\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -48,15 +44,8 @@
             },
             "url": {
               "raw": "{{adminBaseUrl}}/api/v1/tenants/register",
-              "host": [
-                "{{adminBaseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "tenants",
-                "register"
-              ]
+              "host": ["{{adminBaseUrl}}"],
+              "path": ["api", "v1", "tenants", "register"]
             }
           },
           "response": []
@@ -73,12 +62,8 @@
             "header": [],
             "url": {
               "raw": "{{ledgerBaseUrl}}/health",
-              "host": [
-                "{{ledgerBaseUrl}}"
-              ],
-              "path": [
-                "health"
-              ]
+              "host": ["{{ledgerBaseUrl}}"],
+              "path": ["health"]
             }
           },
           "response": []
@@ -96,14 +81,8 @@
             ],
             "url": {
               "raw": "{{ledgerBaseUrl}}/api/v1/balance",
-              "host": [
-                "{{ledgerBaseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "balance"
-              ]
+              "host": ["{{ledgerBaseUrl}}"],
+              "path": ["api", "v1", "balance"]
             }
           },
           "response": []
@@ -121,14 +100,8 @@
             ],
             "url": {
               "raw": "{{ledgerBaseUrl}}/api/v1/ledger",
-              "host": [
-                "{{ledgerBaseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "ledger"
-              ]
+              "host": ["{{ledgerBaseUrl}}"],
+              "path": ["api", "v1", "ledger"]
             }
           },
           "response": []
@@ -146,7 +119,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\r\n    \"reference\": \"unique-idempotency-key-asd\",\r\n    \"type\": \"credit\",\r\n    \"amount\": 25000,\r\n    \"description\": \"Invoice #1043\",\r\n    \"metadata\": {}\r\n}",
+              "raw": "{\r\n    \"reference\": \"unique-idempotency-key\",\r\n    \"type\": \"credit\",\r\n    \"amount\": 150000,\r\n    \"description\": \"Invoice #1099\",\r\n    \"metadata\": {}\r\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -155,14 +128,8 @@
             },
             "url": {
               "raw": "{{ledgerBaseUrl}}/api/v1/transactions",
-              "host": [
-                "{{ledgerBaseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "transactions"
-              ]
+              "host": ["{{ledgerBaseUrl}}"],
+              "path": ["api", "v1", "transactions"]
             }
           },
           "response": []
@@ -180,14 +147,8 @@
             ],
             "url": {
               "raw": "{{ledgerBaseUrl}}/api/v1/transactions",
-              "host": [
-                "{{ledgerBaseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "transactions"
-              ]
+              "host": ["{{ledgerBaseUrl}}"],
+              "path": ["api", "v1", "transactions"]
             }
           },
           "response": []
@@ -205,15 +166,8 @@
             ],
             "url": {
               "raw": "{{ledgerBaseUrl}}/api/v1/transactions/:guid",
-              "host": [
-                "{{ledgerBaseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "transactions",
-                ":guid"
-              ],
+              "host": ["{{ledgerBaseUrl}}"],
+              "path": ["api", "v1", "transactions", ":guid"],
               "variable": [
                 {
                   "key": "guid",
@@ -235,7 +189,21 @@
         "packages": {},
         "requests": {},
         "exec": [
-          ""
+          "// Generate a UUID (GUID) per request and attach as X-Request-Id header\r",
+          "function uuidv4() {\r",
+          "    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {\r",
+          "        const r = Math.random() * 16 | 0;\r",
+          "        const v = (c === 'x') ? r : (r & 0x3 | 0x8);\r",
+          "        return v.toString(16);\r",
+          "    });\r",
+          "}\r",
+          "\r",
+          "// Upsert header so it works whether header exists or not\r",
+          "const requestId = uuidv4();\r",
+          "pm.request.headers.upsert({\r",
+          "    key: \"X-Request-Id\",\r",
+          "    value: requestId\r",
+          "});"
         ]
       }
     },
@@ -245,9 +213,7 @@
         "type": "text/javascript",
         "packages": {},
         "requests": {},
-        "exec": [
-          ""
-        ]
+        "exec": [""]
       }
     }
   ],
@@ -266,7 +232,7 @@
     },
     {
       "key": "tenantApiKey",
-      "value": "TK_aBkXxobVFJHlrR3habXDogp4DbdrQXa3WYiGToPnEPGnlPg8"
+      "value": "TK_9OWBmUL64YC7WsBZ8NYa10VIsQ9VFQqP0SPZVYd55RdNw3az"
     }
   ]
 }

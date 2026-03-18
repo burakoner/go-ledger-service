@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-const requestIDHeaderName = "X-Request-ID"
+const requestIDHeaderName = "X-Request-Id"
 
 type requestIDContextKey struct{}
 
