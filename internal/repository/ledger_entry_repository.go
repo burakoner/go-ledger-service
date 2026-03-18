@@ -29,6 +29,7 @@ type PostgresLedgerEntryRepository struct {
 
 type LedgerEntryRepository interface {
 	ListLedgerEntries(ctx context.Context, tenantSchema string, limit, offset int) ([]LedgerEntryRow, error)
+	CountLedgerEntries(ctx context.Context, tenantSchema string) (int64, error)
 }
 
 func NewPostgresLedgerEntryRepository(db *sql.DB) *PostgresLedgerEntryRepository {
@@ -84,4 +85,29 @@ func (r *PostgresLedgerEntryRepository) ListLedgerEntries(ctx context.Context, t
 	}
 
 	return entries, nil
+}
+
+func (r *PostgresLedgerEntryRepository) CountLedgerEntries(ctx context.Context, tenantSchema string) (int64, error) {
+	if r == nil || r.db == nil {
+		return 0, errors.New("ledger read repository is not initialized")
+	}
+	if !tenant.IsValidSchemaName(tenantSchema) {
+		return 0, errors.New("invalid tenant schema name")
+	}
+
+	queryCtx, cancel := context.WithTimeout(ctx, ledgerEntryTimeout)
+	defer cancel()
+
+	query := fmt.Sprintf(
+		`SELECT count(*)::bigint
+		FROM %s.ledger_entries`,
+		pq.QuoteIdentifier(tenantSchema),
+	)
+
+	var total int64
+	if err := r.db.QueryRowContext(queryCtx, query).Scan(&total); err != nil {
+		return 0, fmt.Errorf("count ledger entries from schema %q: %w", tenantSchema, err)
+	}
+
+	return total, nil
 }

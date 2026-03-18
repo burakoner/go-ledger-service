@@ -47,6 +47,7 @@ type LedgerTransactionRepository interface {
 	GetTransactionByID(ctx context.Context, tenantSchema, transactionID string) (TransactionRow, error)
 	GetTransactionByReference(ctx context.Context, tenantSchema, reference string) (TransactionRow, error)
 	ListTransactions(ctx context.Context, tenantSchema, status string, limit, offset int) ([]TransactionRow, error)
+	CountTransactions(ctx context.Context, tenantSchema, status string) (int64, error)
 	CreatePendingTransaction(ctx context.Context, tenantSchema string, params CreatePendingTransactionParams) (TransactionRow, error)
 }
 
@@ -290,6 +291,35 @@ func (r *PostgresLedgerTransactionRepository) ListTransactions(ctx context.Conte
 	}
 
 	return result, nil
+}
+
+func (r *PostgresLedgerTransactionRepository) CountTransactions(ctx context.Context, tenantSchema, status string) (int64, error) {
+	if r == nil || r.db == nil {
+		return 0, errors.New("transaction read repository is not initialized")
+	}
+	if !tenant.IsValidSchemaName(tenantSchema) {
+		return 0, errors.New("invalid tenant schema name")
+	}
+
+	queryCtx, cancel := context.WithTimeout(ctx, ledgerTransactionTimeout)
+	defer cancel()
+
+	baseQuery := fmt.Sprintf(`SELECT count(*)::bigint FROM %s.transactions`, pq.QuoteIdentifier(tenantSchema))
+
+	var total int64
+	if status == "" {
+		if err := r.db.QueryRowContext(queryCtx, baseQuery).Scan(&total); err != nil {
+			return 0, fmt.Errorf("count transactions from schema %q: %w", tenantSchema, err)
+		}
+		return total, nil
+	}
+
+	query := baseQuery + ` WHERE status = $1`
+	if err := r.db.QueryRowContext(queryCtx, query, status).Scan(&total); err != nil {
+		return 0, fmt.Errorf("count transactions by status from schema %q: %w", tenantSchema, err)
+	}
+
+	return total, nil
 }
 
 func (r *PostgresLedgerTransactionRepository) CreatePendingTransaction(ctx context.Context, tenantSchema string, params CreatePendingTransactionParams) (TransactionRow, error) {

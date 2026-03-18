@@ -192,7 +192,7 @@ func (a *LedgerAPI) handleLedger(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	entries, normalizedLimit, normalizedOffset, err := a.ledgerEntry.ListLedgerEntries(r.Context(), tenantValue, limit, offset)
+	entries, normalizedLimit, normalizedOffset, totalCount, err := a.ledgerEntry.ListLedgerEntries(r.Context(), tenantValue, limit, offset)
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidPagination) {
 			writeAPIError(w, r, http.StatusBadRequest, "INVALID_PAGINATION", err.Error())
@@ -205,10 +205,11 @@ func (a *LedgerAPI) handleLedger(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"tenant_id": tenantValue.TenantID,
-		"limit":     normalizedLimit,
-		"offset":    normalizedOffset,
-		"entries":   entries,
+		"tenant_id":   tenantValue.TenantID,
+		"limit":       normalizedLimit,
+		"offset":      normalizedOffset,
+		"total_count": totalCount,
+		"entries":     entries,
 	})
 }
 
@@ -245,7 +246,7 @@ func (a *LedgerAPI) handleTransactionList(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	transactions, normalizedStatus, normalizedLimit, normalizedOffset, err := a.transactionService.ListTransactions(
+	transactions, normalizedStatus, normalizedLimit, normalizedOffset, totalCount, err := a.transactionService.ListTransactions(
 		r.Context(),
 		tenantValue,
 		statusFilter,
@@ -268,6 +269,7 @@ func (a *LedgerAPI) handleTransactionList(w http.ResponseWriter, r *http.Request
 		"status_filter": normalizedStatus,
 		"limit":         normalizedLimit,
 		"offset":        normalizedOffset,
+		"total_count":   totalCount,
 		"transactions":  transactions,
 	})
 }

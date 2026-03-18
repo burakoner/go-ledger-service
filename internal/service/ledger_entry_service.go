@@ -28,7 +28,7 @@ type LedgerEntryResult struct {
 }
 
 type LedgerEntryService interface {
-	ListLedgerEntries(ctx context.Context, tenantValue tenant.ContextValue, limit, offset int) ([]LedgerEntryResult, int, int, error)
+	ListLedgerEntries(ctx context.Context, tenantValue tenant.ContextValue, limit, offset int) ([]LedgerEntryResult, int, int, int64, error)
 }
 
 type ledgerEntryService struct {
@@ -39,15 +39,20 @@ func NewLedgerEntryService(ledgerReadRepo repository.LedgerEntryRepository) Ledg
 	return &ledgerEntryService{ledgerReadRepo: ledgerReadRepo}
 }
 
-func (s *ledgerEntryService) ListLedgerEntries(ctx context.Context, tenantValue tenant.ContextValue, limit, offset int) ([]LedgerEntryResult, int, int, error) {
+func (s *ledgerEntryService) ListLedgerEntries(ctx context.Context, tenantValue tenant.ContextValue, limit, offset int) ([]LedgerEntryResult, int, int, int64, error) {
 	normalizedLimit, normalizedOffset, err := normalizeLedgerPagination(limit, offset)
 	if err != nil {
-		return nil, 0, 0, err
+		return nil, 0, 0, 0, err
 	}
 
 	rows, err := s.ledgerReadRepo.ListLedgerEntries(ctx, tenantValue.TenantSchema, normalizedLimit, normalizedOffset)
 	if err != nil {
-		return nil, 0, 0, fmt.Errorf("list tenant ledger entries: %w", err)
+		return nil, 0, 0, 0, fmt.Errorf("list tenant ledger entries: %w", err)
+	}
+
+	totalCount, err := s.ledgerReadRepo.CountLedgerEntries(ctx, tenantValue.TenantSchema)
+	if err != nil {
+		return nil, 0, 0, 0, fmt.Errorf("count tenant ledger entries: %w", err)
 	}
 
 	results := make([]LedgerEntryResult, 0, len(rows))
@@ -63,7 +68,7 @@ func (s *ledgerEntryService) ListLedgerEntries(ctx context.Context, tenantValue 
 		})
 	}
 
-	return results, normalizedLimit, normalizedOffset, nil
+	return results, normalizedLimit, normalizedOffset, totalCount, nil
 }
 
 func normalizeLedgerPagination(limit, offset int) (int, int, error) {

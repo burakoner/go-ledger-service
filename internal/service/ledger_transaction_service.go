@@ -51,7 +51,7 @@ type CreatePendingTransactionInput struct {
 type LedgerTransactionService interface {
 	GetTransactionByID(ctx context.Context, tenantValue tenant.ContextValue, transactionID string) (TransactionResult, error)
 	GetTransactionByReference(ctx context.Context, tenantValue tenant.ContextValue, reference string) (TransactionResult, error)
-	ListTransactions(ctx context.Context, tenantValue tenant.ContextValue, status string, limit, offset int) ([]TransactionResult, string, int, int, error)
+	ListTransactions(ctx context.Context, tenantValue tenant.ContextValue, status string, limit, offset int) ([]TransactionResult, string, int, int, int64, error)
 	CreatePendingTransaction(ctx context.Context, tenantValue tenant.ContextValue, input CreatePendingTransactionInput) (TransactionResult, error)
 }
 
@@ -97,15 +97,20 @@ func (s *ledgerTransactionService) GetTransactionByReference(ctx context.Context
 	return mapTransactionRowToResult(row), nil
 }
 
-func (s *ledgerTransactionService) ListTransactions(ctx context.Context, tenantValue tenant.ContextValue, status string, limit, offset int) ([]TransactionResult, string, int, int, error) {
+func (s *ledgerTransactionService) ListTransactions(ctx context.Context, tenantValue tenant.ContextValue, status string, limit, offset int) ([]TransactionResult, string, int, int, int64, error) {
 	normalizedStatus, normalizedLimit, normalizedOffset, err := normalizeTransactionListQuery(status, limit, offset)
 	if err != nil {
-		return nil, "", 0, 0, err
+		return nil, "", 0, 0, 0, err
 	}
 
 	rows, err := s.ledgerRepo.ListTransactions(ctx, tenantValue.TenantSchema, normalizedStatus, normalizedLimit, normalizedOffset)
 	if err != nil {
-		return nil, "", 0, 0, fmt.Errorf("list transactions: %w", err)
+		return nil, "", 0, 0, 0, fmt.Errorf("list transactions: %w", err)
+	}
+
+	totalCount, err := s.ledgerRepo.CountTransactions(ctx, tenantValue.TenantSchema, normalizedStatus)
+	if err != nil {
+		return nil, "", 0, 0, 0, fmt.Errorf("count transactions: %w", err)
 	}
 
 	results := make([]TransactionResult, 0, len(rows))
@@ -113,7 +118,7 @@ func (s *ledgerTransactionService) ListTransactions(ctx context.Context, tenantV
 		results = append(results, mapTransactionRowToResult(row))
 	}
 
-	return results, normalizedStatus, normalizedLimit, normalizedOffset, nil
+	return results, normalizedStatus, normalizedLimit, normalizedOffset, totalCount, nil
 }
 
 func (s *ledgerTransactionService) CreatePendingTransaction(ctx context.Context, tenantValue tenant.ContextValue, input CreatePendingTransactionInput) (TransactionResult, error) {
