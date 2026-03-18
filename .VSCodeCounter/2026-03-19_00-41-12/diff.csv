@@ -1,0 +1,7 @@
+"filename", "language", "YAML", "Markdown", "Go", "comment", "blank", "total"
+"e:\Github\go-ledger-service\.github\workflows\ci.yml", "YAML", 72, 0, 0, 0, 21, 93
+"e:\Github\go-ledger-service\README.md", "Markdown", 0, 40, 0, 0, 1, 41
+"e:\Github\go-ledger-service\internal\repository\tenant_repository.go", "Go", 0, 0, 0, 0, -1, -1
+"e:\Github\go-ledger-service\internal\tenant\context.go", "Go", 0, 0, 0, 0, -1, -1
+"e:\Github\go-ledger-service\internal\worker\runtime.go", "Go", 0, 0, -6, 0, -1, -7
+"Total", "-", 72, 40, -6, 0, 19, 125

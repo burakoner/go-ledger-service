@@ -1,0 +1,49 @@
+"filename", "language", "JSON", "Shell Script", "YAML", "Markdown", "Makefile", "Docker", "Go Module File", "Go Checksum File", "MS SQL", "Go", "comment", "blank", "total"
+"e:\Github\go-ledger-service\.github\workflows\ci.yml", "YAML", 0, 0, 72, 0, 0, 0, 0, 0, 0, 0, 0, 21, 93
+"e:\Github\go-ledger-service\Dockerfile", "Docker", 0, 0, 0, 0, 0, 14, 0, 0, 0, 0, 12, 12, 38
+"e:\Github\go-ledger-service\Go Ledger Service.postman_collection.json", "JSON", 238, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 239
+"e:\Github\go-ledger-service\Makefile", "Makefile", 0, 0, 0, 0, 11, 0, 0, 0, 0, 0, 0, 7, 18
+"e:\Github\go-ledger-service\README.md", "Markdown", 0, 0, 0, 166, 0, 0, 0, 0, 0, 0, 0, 59, 225
+"e:\Github\go-ledger-service\cmd\ledger-admin\main.go", "Go", 0, 0, 0, 0, 0, 0, 0, 0, 0, 403, 9, 85, 497
+"e:\Github\go-ledger-service\cmd\ledger-api\main.go", "Go", 0, 0, 0, 0, 0, 0, 0, 0, 0, 74, 3, 12, 89
+"e:\Github\go-ledger-service\cmd\ledger-worker\main.go", "Go", 0, 0, 0, 0, 0, 0, 0, 0, 0, 20, 0, 6, 26
+"e:\Github\go-ledger-service\cmd\webhook-receiver\main.go", "Go", 0, 0, 0, 0, 0, 0, 0, 0, 0, 82, 0, 15, 97
+"e:\Github\go-ledger-service\docker-compose.yml", "YAML", 0, 0, 146, 0, 0, 0, 0, 0, 0, 0, 4, 8, 158
+"e:\Github\go-ledger-service\docs\Go Take-Home Task.md", "Markdown", 0, 0, 0, 145, 0, 0, 0, 0, 0, 0, 0, 55, 200
+"e:\Github\go-ledger-service\go.mod", "Go Module File", 0, 0, 0, 0, 0, 0, 12, 0, 0, 0, 0, 5, 17
+"e:\Github\go-ledger-service\go.sum", "Go Checksum File", 0, 0, 0, 0, 0, 0, 0, 16, 0, 0, 0, 1, 17
+"e:\Github\go-ledger-service\internal\cache\redis.go", "Go", 0, 0, 0, 0, 0, 0, 0, 0, 0, 34, 2, 11, 47
+"e:\Github\go-ledger-service\internal\config\ledger.go", "Go", 0, 0, 0, 0, 0, 0, 0, 0, 0, 168, 0, 22, 190
+"e:\Github\go-ledger-service\internal\db\postgres.go", "Go", 0, 0, 0, 0, 0, 0, 0, 0, 0, 55, 0, 14, 69
+"e:\Github\go-ledger-service\internal\http\ledger_api.go", "Go", 0, 0, 0, 0, 0, 0, 0, 0, 0, 638, 1, 98, 737
+"e:\Github\go-ledger-service\internal\http\request_id.go", "Go", 0, 0, 0, 0, 0, 0, 0, 0, 0, 36, 7, 10, 53
+"e:\Github\go-ledger-service\internal\http\response.go", "Go", 0, 0, 0, 0, 0, 0, 0, 0, 0, 32, 2, 6, 40
+"e:\Github\go-ledger-service\internal\idempotency\redis_reference_store.go", "Go", 0, 0, 0, 0, 0, 0, 0, 0, 0, 205, 8, 37, 250
+"e:\Github\go-ledger-service\internal\idempotency\redis_reference_store_test.go", "Go", 0, 0, 0, 0, 0, 0, 0, 0, 0, 122, 0, 26, 148
+"e:\Github\go-ledger-service\internal\ratelimiting\redis_sliding_window.go", "Go", 0, 0, 0, 0, 0, 0, 0, 0, 0, 143, 0, 24, 167
+"e:\Github\go-ledger-service\internal\ratelimiting\redis_sliding_window_test.go", "Go", 0, 0, 0, 0, 0, 0, 0, 0, 0, 112, 0, 22, 134
+"e:\Github\go-ledger-service\internal\repository\ledger_balance_repository.go", "Go", 0, 0, 0, 0, 0, 0, 0, 0, 0, 44, 0, 13, 57
+"e:\Github\go-ledger-service\internal\repository\ledger_entry_repository.go", "Go", 0, 0, 0, 0, 0, 0, 0, 0, 0, 94, 0, 20, 114
+"e:\Github\go-ledger-service\internal\repository\ledger_transaction_repository.go", "Go", 0, 0, 0, 0, 0, 0, 0, 0, 0, 374, 2, 48, 424
+"e:\Github\go-ledger-service\internal\repository\tenant_repository.go", "Go", 0, 0, 0, 0, 0, 0, 0, 0, 0, 54, 4, 12, 70
+"e:\Github\go-ledger-service\internal\service\ledger_balance_service.go", "Go", 0, 0, 0, 0, 0, 0, 0, 0, 0, 31, 0, 9, 40
+"e:\Github\go-ledger-service\internal\service\ledger_entry_service.go", "Go", 0, 0, 0, 0, 0, 0, 0, 0, 0, 74, 0, 16, 90
+"e:\Github\go-ledger-service\internal\service\ledger_entry_service_test.go", "Go", 0, 0, 0, 0, 0, 0, 0, 0, 0, 173, 0, 16, 189
+"e:\Github\go-ledger-service\internal\service\ledger_transaction_service.go", "Go", 0, 0, 0, 0, 0, 0, 0, 0, 0, 189, 3, 34, 226
+"e:\Github\go-ledger-service\internal\service\ledger_transaction_service_test.go", "Go", 0, 0, 0, 0, 0, 0, 0, 0, 0, 325, 0, 32, 357
+"e:\Github\go-ledger-service\internal\service\tenant_auth_service.go", "Go", 0, 0, 0, 0, 0, 0, 0, 0, 0, 41, 3, 11, 55
+"e:\Github\go-ledger-service\internal\service\tenant_auth_service_test.go", "Go", 0, 0, 0, 0, 0, 0, 0, 0, 0, 95, 0, 17, 112
+"e:\Github\go-ledger-service\internal\tenant\context.go", "Go", 0, 0, 0, 0, 0, 0, 0, 0, 0, 25, 4, 7, 36
+"e:\Github\go-ledger-service\internal\tenant\schema.go", "Go", 0, 0, 0, 0, 0, 0, 0, 0, 0, 6, 1, 4, 11
+"e:\Github\go-ledger-service\internal\worker\runtime.go", "Go", 0, 0, 0, 0, 0, 0, 0, 0, 0, 209, 2, 40, 251
+"e:\Github\go-ledger-service\internal\worker\transaction_processor.go", "Go", 0, 0, 0, 0, 0, 0, 0, 0, 0, 192, 0, 32, 224
+"e:\Github\go-ledger-service\internal\worker\webhook_processor.go", "Go", 0, 0, 0, 0, 0, 0, 0, 0, 0, 189, 0, 33, 222
+"e:\Github\go-ledger-service\migrations\0001_init_public.sql", "MS SQL", 0, 0, 0, 0, 0, 0, 0, 0, 34, 0, 8, 10, 52
+"e:\Github\go-ledger-service\migrations\0002_init_tenant_schema.sql", "MS SQL", 0, 0, 0, 0, 0, 0, 0, 0, 37, 0, 3, 8, 48
+"e:\Github\go-ledger-service\migrations\0003_seed_demo_data.sql", "MS SQL", 0, 0, 0, 0, 0, 0, 0, 0, 941, 0, 5, 54, 1000
+"e:\Github\go-ledger-service\scripts\tests\concurrency.sh", "Shell Script", 0, 103, 0, 0, 0, 0, 0, 0, 0, 0, 1, 20, 124
+"e:\Github\go-ledger-service\scripts\tests\concurrency_overdraw.sh", "Shell Script", 0, 129, 0, 0, 0, 0, 0, 0, 0, 0, 1, 30, 160
+"e:\Github\go-ledger-service\scripts\tests\integration.sh", "Shell Script", 0, 131, 0, 0, 0, 0, 0, 0, 0, 0, 1, 33, 165
+"e:\Github\go-ledger-service\scripts\tests\lib.sh", "Shell Script", 0, 178, 0, 0, 0, 0, 0, 0, 0, 0, 1, 41, 220
+"e:\Github\go-ledger-service\scripts\tests\smoke.sh", "Shell Script", 0, 25, 0, 0, 0, 0, 0, 0, 0, 0, 1, 8, 34
+"Total", "-", 238, 566, 218, 311, 11, 14, 12, 16, 1012, 4239, 88, 1105, 7830
